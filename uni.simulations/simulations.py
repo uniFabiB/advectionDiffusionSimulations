@@ -8,6 +8,11 @@ import datetime
 ### code source code file ###
 from shutil import copy
 from ufl.tensors import as_scalar
+from ufl.operators import div, grad
+from firedrake.variational_solver import LinearVariationalSolver
+from networkx.algorithms.centrality.flow_matrix import InverseLaplacian
+from firedrake.ufl_expr import TrialFunction
+from firedrake.functionspace import FunctionSpace
 
 
 # using now() to get current time  
@@ -96,8 +101,8 @@ x, y = SpatialCoordinate(mesh)
 ### initial data ###
 ic_theta = Function(V)
 
-#ic_theta.interpolate(ic_scale*sin(ic_freq_x*2*pi*y/L_y))
-ic_theta.interpolate(ic_scale*e**(-ic_freq_x*((x-L_x/2)/L_x)**2-ic_freq_y*((y-L_y/2)/L_y)**2))
+ic_theta.interpolate(ic_scale*sin(ic_freq_x*2*pi*y/L_y))
+#ic_theta.interpolate(ic_scale*e**(-ic_freq_x*((x-L_x/2)/L_x)**2-ic_freq_y*((y-L_y/2)/L_y)**2))
 #ic_theta.interpolate(-scale*cos(freq_x*2*pi*x/L_x))
 #ic_theta.interpolate(-scale*cos(freq_y*2*pi*y/L_y))
 
@@ -105,9 +110,6 @@ ic_theta.interpolate(ic_scale*e**(-ic_freq_x*((x-L_x/2)/L_x)**2-ic_freq_y*((y-L_
 if randomIC:
     u_0Random = ic_scale*(2*np.random.rand(n_x*n_y)-1)       # 2*... - 1 -> -1 und 1
     ic_theta = Function(V,u_0Random)
-
-
-
 
 
 
@@ -175,14 +177,12 @@ else:
     testFunctionA, testFunctionB = TestFunctions(W)
     
 
-
 #################################
 
 print("inital values assigned after ",datetime.datetime.now()-time_start)  
 
 #################################
 
-theta = theta.Lap
 
 ##### pde #####
 
@@ -277,6 +277,35 @@ solver = NonlinearVariationalSolver(problem, solver_parameters=sp_it)
 
 
 
+
+
+###################################
+def inverseLaplacian(function):
+    # returns lap^-1 f
+    # f=function, u = outFunction
+    # lap u = f
+    # <lap u, v> =<f,v>
+    # <-grad u, grad v> = <f,v>
+    # <-grad u, grad v> - <f,v> = 0
+    # <grad u, grad v> + <f,v> = 0 
+    #print("1",function.dat.data)
+
+    outFunction = Function(function.function_space())
+    testFunctionInvLap = TestFunction(function.function_space())
+    F_invLap = (inner(grad(outFunction),grad(testFunctionInvLap))+dot(function,testFunctionInvLap))*dx
+    solve(F_invLap == 0, outFunction)
+    return outFunction
+###################################
+def calcLaplacian(function):
+    gradFunction = project(grad(function), V_vec)
+    return project(div(gradFunction),V)
+###################################
+def getZeroAverageOfScalarFunction(function):
+    sum = np.sum(function.dat.data)
+    function.dat.data[:] = function.dat.data[:]-sum/(n_x*n_y)
+    return function
+###################################
+
 ### batchelor scale ###
 ### WRONG BATCHELOR SCALE IS L_BAT = (KAPPA / \| \nabla u_adv\|)**(1/2) BUT ONLY FOR adv diff pde (advection heat equation) where kappa laplace theta
 if False:
@@ -333,9 +362,11 @@ gradThetaX.dat.data[:] = gradTheta.dat.data[:,0]
 gradThetaY = Function(V_out)
 gradThetaY.dat.data[:] = gradTheta.dat.data[:,1]
 
+lapInvLapTheta = calcLaplacian(inverseLaplacian(theta))
+
 
 outfile_theta = File(output_dir_path + "/../data/temp/theta.pvd")
-outfile_theta.write(project(theta, V_out, name="theta"),project(theta, V_out, name="theta again"),project(gradThetaX, V_out, name="d/dx theta"),project(gradThetaY, V_out, name="d/dy theta"), project(l_domFunction, V_out, name="l_dom"), time=t)
+outfile_theta.write(project(theta, V_out, name="theta"),project(theta, V_out, name="theta again"),project(lapInvLapTheta, V_out, name="lap (lap^-1(theta))"),project(theta - lapInvLapTheta, V_out, name="theta - lap (lap^-1(theta))"),project(gradThetaX, V_out, name="d/dx theta"),project(gradThetaY, V_out, name="d/dy theta"), project(l_domFunction, V_out, name="l_dom"), time=t)
 
 
 
@@ -389,18 +420,11 @@ copy(os.path.realpath(__file__), output_dir_path + "/../data/temp/0used_script.p
 
 
 
-
-
-#################################
-def getZeroAverageOfScalarFunction(function):
-    sum = np.sum(function.dat.data)
-    function.dat.data[:] = function.dat.data[:]-sum/(n_x*n_y)
-    return function
-###################################
-
-
-
-
+print(theta.dat.data)
+invLapTheta = inverseLaplacian(theta)
+tempTheta = calcLaplacian(invLapTheta)
+print(tempTheta.dat.data)
+print("l2 theta",norm(theta,"l2")," l2 lap lap^-1 theta",norm(tempTheta,"l2")," l2 theta - lap lap^-1 theta",norm(theta-tempTheta,"l2"))
 ### simulating ###
 
 timeStartSolving = datetime.datetime.now()
@@ -423,7 +447,8 @@ while (t < T_end):
     gradTheta = project(grad(theta), V_vec)
     gradThetaX.dat.data[:] = gradTheta.dat.data[:,0]
     gradThetaY.dat.data[:] = gradTheta.dat.data[:,1]
-    outfile_theta.write(project(theta, V_out, name="theta"),project(theta, V_out, name="theta again"),project(gradThetaX, V_out, name="d/dx theta"),project(gradThetaY, V_out, name="d/dy theta"), project(l_domFunction, V_out, name="l_dom"), time=t)
+    lapInvLapTheta = calcLaplacian(inverseLaplacian(theta))
+    outfile_theta.write(project(theta, V_out, name="theta"),project(theta, V_out, name="theta again"),project(lapInvLapTheta, V_out, name="lap (lap^-1(theta))"),project(theta - lapInvLapTheta, V_out, name="theta - lap (lap^-1(theta))"),project(gradThetaX, V_out, name="d/dx theta"),project(gradThetaY, V_out, name="d/dy theta"), project(l_domFunction, V_out, name="l_dom"), time=t)
     
     
     ### write output time functions ###
@@ -471,6 +496,4 @@ if False:
     parametersString += ["\n\n# time for simulation","\nstarting at ",str(time_start)]
     logFile.writelines(parametersString)
     logFile.close()
-
-
 
