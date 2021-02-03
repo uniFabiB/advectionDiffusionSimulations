@@ -289,7 +289,8 @@ def inverseLaplacian(function):
     # <-grad u, grad v> - <f,v> = 0
     # <grad u, grad v> + <f,v> = 0 
     #print("1",function.dat.data)
-
+    
+    
     outFunction = Function(function.function_space())
     testFunctionInvLap = TestFunction(function.function_space())
     F_invLap = (inner(grad(outFunction),grad(testFunctionInvLap))+dot(function,testFunctionInvLap))*dx
