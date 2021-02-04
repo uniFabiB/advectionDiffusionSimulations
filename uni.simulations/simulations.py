@@ -9,16 +9,12 @@ import datetime
 from shutil import copy
 from ufl.tensors import as_scalar
 from ufl.operators import div, grad
-from firedrake.variational_solver import LinearVariationalSolver
-from networkx.algorithms.centrality.flow_matrix import InverseLaplacian
-from firedrake.ufl_expr import TrialFunction
-from firedrake.functionspace import FunctionSpace
+from firedrake.norms import norm
 
 
 # using now() to get current time  
 time_start = datetime.datetime.now()
-print("starting at ",time_start)  
-
+print(time_start,"starting ...")  
 
 
 
@@ -27,12 +23,12 @@ print("starting at ",time_start)
 ### PARAMETERS ###
 
 # interval lengths
-L = 64
+L = 1
 L_x = L
 L_y = L
 
 # spatial steps
-nProL = 1
+nProL = 128
 n_x = L_x*nProL
 n_y = L_y*nProL
 #n = 64*2
@@ -40,8 +36,8 @@ n_y = L_y*nProL
 #n_y = n
 
 # times
-numberOfTimestepsPerUnit = 50
-T_end = 500
+numberOfTimestepsPerUnit = 2500
+T_end = 1
 
 # pde name
 # list of available shortNames: nonLin, onlyAdv, advLap, advLap2, advLap2Lap, kuraSiva
@@ -56,7 +52,7 @@ finitEleDegree = 1
 forceZeroAverage = False
 
 # kappa in theta_t + < u_adv, grad theta> + kappa*laplace theta + laplace^2 theta = 0
-kappa = 1
+kappa = 1/32
 
 ### initial condition ###
 ic_scale = 1
@@ -81,7 +77,6 @@ adv_freqY = adv_freq
 
 
 
-
 T_0 = 0
 numberOfTimesteps = round(numberOfTimestepsPerUnit*(T_end-T_0))
 timestep = (T_end-T_0)/numberOfTimesteps
@@ -96,12 +91,13 @@ V_out = FunctionSpace(mesh, finitEleFamily, 1)
 x, y = SpatialCoordinate(mesh)
 
 
+print(datetime.datetime.now(),"spaces defined")  
 
 
 ### initial data ###
 ic_theta = Function(V)
 
-ic_theta.interpolate(ic_scale*sin(ic_freq_x*2*pi*y/L_y))
+ic_theta.interpolate(ic_scale*sin(ic_freq_x*2*pi*x/L_x))
 #ic_theta.interpolate(ic_scale*e**(-ic_freq_x*((x-L_x/2)/L_x)**2-ic_freq_y*((y-L_y/2)/L_y)**2))
 #ic_theta.interpolate(-scale*cos(freq_x*2*pi*x/L_x))
 #ic_theta.interpolate(-scale*cos(freq_y*2*pi*y/L_y))
@@ -114,16 +110,88 @@ if randomIC:
 
 
 
-#u_adv = project(as_vector([sin(freq_x*2*pi*y/L_y), sin(freq_x*2*pi*x/L_x)]), V)
+#u_adv = project(as_vector([sin(adv_freqX*2*pi*y/L_y), sin(adv_freqY*2*pi*x/L_x)]), V_vec)
 #u_adv = project(as_vector([adv_scaleX*sin(adv_freqX*2*pi*y/L_y), adv_scaleY*sin(adv_freqY*2*pi*x/L_x)]), V_vec)
+u_adv = project(as_vector([adv_scaleX*sin(adv_freqX*2*pi*y/L_y),0]), V_vec)
 #u_adv = project(as_vector([y/L_y,0]), V_vec)
-u_adv = project(as_vector([2*(x-L_x/2),-2*(y-L_y/2)]), V_vec)
-#u_adv = project(as_vector([1, 1]), V)
+#u_adv = project(as_vector([2*(x-L_x/2),-2*(y-L_y/2)]), V_vec)
+#u_adv = project(as_vector([1, 1]), V_vec)
 if advZero:
     u_adv.assign(0)
+    
+    
+print(datetime.datetime.now(),"inital values assigned ")  
 
 
 
+
+
+### functions ### 
+###################################
+def calcInverseLaplacian(function):
+    # returns lap^-1 f
+    # f=function, u = outFunction
+    # lap u = f
+    # <lap u, v> =<f,v>
+    # <-grad u, grad v> = <f,v>
+    # <-grad u, grad v> - <f,v> = 0
+    # <grad u, grad v> + <f,v> = 0 
+    #print("1",function.dat.data)
+    
+    
+    outFunction = Function(V)
+    testFunctionInvLap = TestFunction(V)
+    F_invLap = (inner(grad(outFunction),grad(testFunctionInvLap))+dot(function,testFunctionInvLap))*dx
+    solve(F_invLap == 0, outFunction)
+    return outFunction
+###################################
+def calcLaplacian(function):
+    gradFunction = project(grad(function), V_vec)
+    return project(div(gradFunction),V)
+###################################
+def getZeroAverageOfScalarFunction(function):
+    sum = np.sum(function.dat.data)
+    function.dat.data[:] = function.dat.data[:]-sum/(n_x*n_y)
+    return function
+###################################
+### now miles flow ###
+### page 40 https://deepblue.lib.umich.edu/bitstream/handle/2027.42/143927/cmiless_1.pdf?sequence=1
+def calcMilesLerayDivFreeProjector(vectorFunction):
+    vectorFunctionTemp = project(vectorFunction, V_vec)  ### IF THIS FAILS IT WAS PROBABLY NOT A VECTOR FUNCTION
+    diverg = project(div(vectorFunction),V)
+    lastTerm = project(grad(calcInverseLaplacian(diverg)), V_vec)
+    returnFunction = Function(V_vec)
+    returnFunction.dat.data[:] = vectorFunctionTemp.dat.data[:] - lastTerm.dat.data[:]
+    return returnFunction
+def calcIntegral(function):
+    return assemble(function*dx)
+def calcSpatialAverage(function):
+    return calcIntegral(function)/(L_x*L_y)
+def calcAbsOfVectorFunction(function):
+    absFunction = Function(V)
+    absFunction.dat.data[:] = (function.dat.data[:,0]**2+function.dat.data[:,1]**2)**(1/2)
+    return absFunction
+def calcMilesOptimalFlowEnergyCase(function):
+    funcFunction = project(function, V)
+    invLap = calcInverseLaplacian(funcFunction)
+    nablaInvLap = project(grad(invLap), V_vec)
+    functionNablaLapInvFunction = Function(V_vec)
+    functionNablaLapInvFunction.dat.data[:,0] = funcFunction.dat.data[:]*nablaInvLap.dat.data[:,0]
+    functionNablaLapInvFunction.dat.data[:,1] = funcFunction.dat.data[:]*nablaInvLap.dat.data[:,1]
+    projection = calcMilesLerayDivFreeProjector(functionNablaLapInvFunction)
+    #normalisationFactor = 1/((calcSpatialAverage(calcAbsOfVectorFunction(projection))**2)**(1/2))
+    normalisationFactor = 1/(norm(projection,"l2"))
+    #print(normalisationFactor)
+    retFunction = projection
+    retFunction.dat.data[:] = normalisationFactor*projection.dat.data[:]
+    return retFunction
+def getComponentOfVectorFunction(function, component):
+    retFunction = Function(V)
+    retFunction.assign(0)
+    retFunction.dat.data[:] = function.dat.data[:,component]
+    return retFunction
+    
+    
 
 
 if pdeShortName in ['nonLin']:
@@ -179,9 +247,9 @@ else:
 
 #################################
 
-print("inital values assigned after ",datetime.datetime.now()-time_start)  
 
 #################################
+
 
 
 ##### pde #####
@@ -196,7 +264,7 @@ F_onlyAdv = (inner((theta - theta_old)/timestep, testFunctionA)
 
 F_advLap = (inner((theta - theta_old)/timestep, testFunctionA)
     + inner(dot(u_adv,grad(theta)), testFunctionA) 
-    + inner(grad(theta), grad(testFunctionA))
+    + kappa * inner(grad(theta), grad(testFunctionA))
     )*dx
 
 if numberTestFunctions == 2:
@@ -275,37 +343,12 @@ sp_it = {
 solver = NonlinearVariationalSolver(problem, solver_parameters=sp_it)
 
 
-
-
-
-
-###################################
-def inverseLaplacian(function):
-    # returns lap^-1 f
-    # f=function, u = outFunction
-    # lap u = f
-    # <lap u, v> =<f,v>
-    # <-grad u, grad v> = <f,v>
-    # <-grad u, grad v> - <f,v> = 0
-    # <grad u, grad v> + <f,v> = 0 
-    #print("1",function.dat.data)
     
-    
-    outFunction = Function(function.function_space())
-    testFunctionInvLap = TestFunction(function.function_space())
-    F_invLap = (inner(grad(outFunction),grad(testFunctionInvLap))+dot(function,testFunctionInvLap))*dx
-    solve(F_invLap == 0, outFunction)
-    return outFunction
-###################################
-def calcLaplacian(function):
-    gradFunction = project(grad(function), V_vec)
-    return project(div(gradFunction),V)
-###################################
-def getZeroAverageOfScalarFunction(function):
-    sum = np.sum(function.dat.data)
-    function.dat.data[:] = function.dat.data[:]-sum/(n_x*n_y)
-    return function
-###################################
+print(datetime.datetime.now(),"variational problem defined")  
+
+
+
+
 
 ### batchelor scale ###
 ### WRONG BATCHELOR SCALE IS L_BAT = (KAPPA / \| \nabla u_adv\|)**(1/2) BUT ONLY FOR adv diff pde (advection heat equation) where kappa laplace theta
@@ -332,8 +375,10 @@ if False:
     l_batFunction.assign(l_bat)
 
 
-
-l_dom = (2*sqrt(2)*pi)*(kappa**(-1/2))
+if kappa != 0:
+    l_dom = (2*sqrt(2)*pi)*(kappa**(-1/2))
+else:
+    l_dom = 0
 print("dominant wavelength (of laplace laplace^2) l_dom=",str(l_dom))
 
 
@@ -363,11 +408,16 @@ gradThetaX.dat.data[:] = gradTheta.dat.data[:,0]
 gradThetaY = Function(V_out)
 gradThetaY.dat.data[:] = gradTheta.dat.data[:,1]
 
-lapInvLapTheta = calcLaplacian(inverseLaplacian(theta))
+tempTest3 = Function(V_vec)
+tempTest3 = calcMilesOptimalFlowEnergyCase(theta)
+print(tempTest3.dat.data)
+tempTest1 = getComponentOfVectorFunction(tempTest3, 0)
+tempTest2 = getComponentOfVectorFunction(tempTest3, 1)
+
 
 
 outfile_theta = File(output_dir_path + "/../data/temp/theta.pvd")
-outfile_theta.write(project(theta, V_out, name="theta"),project(theta, V_out, name="theta again"),project(lapInvLapTheta, V_out, name="lap (lap^-1(theta))"),project(theta - lapInvLapTheta, V_out, name="theta - lap (lap^-1(theta))"),project(gradThetaX, V_out, name="d/dx theta"),project(gradThetaY, V_out, name="d/dy theta"), project(l_domFunction, V_out, name="l_dom"), time=t)
+outfile_theta.write(project(theta, V_out, name="theta"),project(theta, V_out, name="theta again"),project(tempTest1, V_out, name="test 1"),project(tempTest2, V_out, name="test 2"),project(gradThetaX, V_out, name="d/dx theta"),project(gradThetaY, V_out, name="d/dy theta"), project(l_domFunction, V_out, name="l_dom"), time=t)
 
 
 
@@ -419,13 +469,6 @@ copy(os.path.realpath(__file__), output_dir_path + "/../data/temp/0used_script.p
 
 
 
-
-
-print(theta.dat.data)
-invLapTheta = inverseLaplacian(theta)
-tempTheta = calcLaplacian(invLapTheta)
-print(tempTheta.dat.data)
-print("l2 theta",norm(theta,"l2")," l2 lap lap^-1 theta",norm(tempTheta,"l2")," l2 theta - lap lap^-1 theta",norm(theta-tempTheta,"l2"))
 ### simulating ###
 
 timeStartSolving = datetime.datetime.now()
@@ -448,8 +491,13 @@ while (t < T_end):
     gradTheta = project(grad(theta), V_vec)
     gradThetaX.dat.data[:] = gradTheta.dat.data[:,0]
     gradThetaY.dat.data[:] = gradTheta.dat.data[:,1]
-    lapInvLapTheta = calcLaplacian(inverseLaplacian(theta))
-    outfile_theta.write(project(theta, V_out, name="theta"),project(theta, V_out, name="theta again"),project(lapInvLapTheta, V_out, name="lap (lap^-1(theta))"),project(theta - lapInvLapTheta, V_out, name="theta - lap (lap^-1(theta))"),project(gradThetaX, V_out, name="d/dx theta"),project(gradThetaY, V_out, name="d/dy theta"), project(l_domFunction, V_out, name="l_dom"), time=t)
+    #lapInvLapTheta = calcLaplacian(calcInverseLaplacian(theta))
+    tempTest3 = calcMilesOptimalFlowEnergyCase(theta)
+    tempTest1 = getComponentOfVectorFunction(tempTest3, 0)
+    tempTest2 = getComponentOfVectorFunction(tempTest3, 1)
+    if(t_i>10):
+        u_adv.assign(tempTest3)
+    outfile_theta.write(project(theta, V_out, name="theta"),project(theta, V_out, name="theta again"),project(tempTest1, V_out, name="test 1"),project(tempTest2, V_out, name="test 2"),project(gradThetaX, V_out, name="d/dx theta"),project(gradThetaY, V_out, name="d/dy theta"), project(l_domFunction, V_out, name="l_dom"), time=t)
     
     
     ### write output time functions ###
@@ -474,11 +522,6 @@ while (t < T_end):
 time_end = datetime.datetime.now()
 print("ending at ",time_end)
 print("total time ", time_end-time_start)
-logFile = open(output_dir_path + "/../data/temp/0log.txt","a") 
-parametersString += ["\nending at ",str(time_end),"\ntotal time in hh:min:sec = ",str(time_end-time_start)]
-logFile.writelines(parametersString)
-logFile.close()
-
 
 
 
@@ -497,4 +540,9 @@ if False:
     parametersString += ["\n\n# time for simulation","\nstarting at ",str(time_start)]
     logFile.writelines(parametersString)
     logFile.close()
+    logFile = open(output_dir_path + "/../data/temp/0log.txt","a") 
+    parametersString += ["\nending at ",str(time_end),"\ntotal time in hh:min:sec = ",str(time_end-time_start)]
+    logFile.writelines(parametersString)
+    logFile.close()
+
 
