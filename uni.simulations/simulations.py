@@ -9,7 +9,8 @@ import datetime
 from shutil import copy
 from ufl.tensors import as_scalar
 from ufl.operators import div, grad
-from firedrake.norms import norm
+from ufl import indexed
+
 
 
 # using now() to get current time  
@@ -28,7 +29,7 @@ L_x = L
 L_y = L
 
 # spatial steps
-nProL = 128
+nProL = 64
 n_x = L_x*nProL
 n_y = L_y*nProL
 #n = 64*2
@@ -36,8 +37,9 @@ n_y = L_y*nProL
 #n_y = n
 
 # times
-numberOfTimestepsPerUnit = 2500
+numberOfTimestepsPerUnit = 200
 T_end = 1
+timeStepsInitialUadv = 20       ### for miles u_adv need a sine flow until t = 0.01 (otherwise stationary)
 
 # pde name
 # list of available shortNames: nonLin, onlyAdv, advLap, advLap2, advLap2Lap, kuraSiva
@@ -69,6 +71,11 @@ adv_scaleY = adv_scale
 adv_freq = 1
 adv_freqX = adv_freq
 adv_freqY = adv_freq
+
+useMilesEnergyFlow = True
+
+### rescale outputs -> \| . \|_2 = 1 ###
+rescaleOutputs = True
 
 ### PARAMETERS END ###
 
@@ -185,11 +192,56 @@ def calcMilesOptimalFlowEnergyCase(function):
     retFunction = projection
     retFunction.dat.data[:] = normalisationFactor*projection.dat.data[:]
     return retFunction
+def calcDivMinus1ofScalar(function):
+    # div^{-1} = div^{-1} divgrad laplace^{-1} = grad laplace^{-1}
+    return project(grad(calcInverseLaplacian(function)),V_vec)
+def calcHminus1NormOfScalar(function):
+    return norm(calcDivMinus1ofScalar(function),"l2")
 def getComponentOfVectorFunction(function, component):
     retFunction = Function(V)
     retFunction.assign(0)
     retFunction.dat.data[:] = function.dat.data[:,component]
     return retFunction
+def getOutputMeshFunction(function, name, value = None, component = -1):
+    if value != None:
+        thisFunction = Function(V)
+        thisFunction.assign(value)
+    else:
+        if isinstance(function, Function):
+            thisFunction = function
+        else:
+            thisFunction = project(function,V)      ### when indexed for example theta, theta_laplace = w.split() then theta is not a function but rather Indexed: w_20[0] or something like this
+    retFunction = Function(V_out, name = name)
+    if component in[0,1]:
+        retFunction.dat.data[:] = thisFunction.dat.data[:,component]
+    else:
+        retFunction.dat.data[:] = thisFunction.dat.data[:]
+    if rescaleOutputs:
+        if value == None:
+            retFunction /= norm(thisFunction,"l2")
+    return retFunction
+def writeOutputMeshFunctions():
+    
+    outTheta1 = getOutputMeshFunction(theta, "theta")
+    outTheta2 = getOutputMeshFunction(theta, "theta (2)")
+    outTheta3 = getOutputMeshFunction(theta, "theta (3)")
+    
+    gradTheta = project(grad(theta), V_vec)
+    outGradThetaX = getOutputMeshFunction(gradTheta, "d/dx theta", None, 0)
+    outGradThetaY = getOutputMeshFunction(gradTheta, "d/dy theta", None, 1)
+    
+    outUadvX = getOutputMeshFunction(u_adv, "u_adv x", None, 0)
+    outUadvY = getOutputMeshFunction(u_adv, "u_adv y", None, 1)
+    
+    l_domFunction = Function(V).assign(l_dom)
+    outLdom = getOutputMeshFunction(None,"l_dominant", l_dom)
+
+    outfile_theta.write(outTheta1, outTheta2, outTheta3, outGradThetaX, outGradThetaY, outUadvX, outUadvY, outLdom, time=t)
+
+
+
+
+
     
     
 
@@ -242,6 +294,7 @@ else:
     theta_old, theta_laplace_old = split(w_old)
     
     
+    
     testFunctionA, testFunctionB = TestFunctions(W)
     
 
@@ -271,22 +324,22 @@ if numberTestFunctions == 2:
     F_advLap2Lap = (inner((theta - theta_old)/timestep, testFunctionA)
         + inner(dot(u_adv,grad(theta)), testFunctionA) 
         + kappa*inner(theta_laplace, testFunctionA)
-        - inner(grad(theta_laplace), grad(testFunctionA))
+        - kappa*inner(grad(theta_laplace), grad(testFunctionA))
         + inner(theta_laplace, testFunctionB)
         + inner(grad(theta), grad(testFunctionB))
         )*dx
     
     F_advLap2 = (inner((theta - theta_old)/timestep, testFunctionA)
         + inner(dot(u_adv,grad(theta)), testFunctionA)
-        - inner(grad(theta_laplace), grad(testFunctionA))
+        - kappa*inner(grad(theta_laplace), grad(testFunctionA))
         + inner(theta_laplace, testFunctionB)
         + inner(grad(theta), grad(testFunctionB))
         )*dx
         
     F_kuraSiva = (inner((theta - theta_old)/timestep, testFunctionA)
         + 1/2*inner(dot(grad(theta),grad(theta)), testFunctionA) 
-        + inner(theta_laplace, testFunctionA)
-        - inner(grad(theta_laplace), grad(testFunctionA))
+        + kappa*inner(theta_laplace, testFunctionA)
+        - kappa*inner(grad(theta_laplace), grad(testFunctionA))
         + inner(theta_laplace, testFunctionB)
         + inner(grad(theta), grad(testFunctionB))
         )*dx
@@ -396,59 +449,46 @@ output_dir_path = os.path.dirname(os.path.realpath(__file__))
 t = T_0
 
 
-l_domFunction = Function(V_out)
-l_domFunction.assign(l_dom)
-
-gradTheta = Function(V_vec)
-gradTheta = project(grad(theta), V_vec)
-
-gradThetaX = Function(V_out)
-gradThetaX.dat.data[:] = gradTheta.dat.data[:,0]
-
-gradThetaY = Function(V_out)
-gradThetaY.dat.data[:] = gradTheta.dat.data[:,1]
-
-tempTest3 = Function(V_vec)
-tempTest3 = calcMilesOptimalFlowEnergyCase(theta)
-print(tempTest3.dat.data)
-tempTest1 = getComponentOfVectorFunction(tempTest3, 0)
-tempTest2 = getComponentOfVectorFunction(tempTest3, 1)
 
 
 
 outfile_theta = File(output_dir_path + "/../data/temp/theta.pvd")
-outfile_theta.write(project(theta, V_out, name="theta"),project(theta, V_out, name="theta again"),project(tempTest1, V_out, name="test 1"),project(tempTest2, V_out, name="test 2"),project(gradThetaX, V_out, name="d/dx theta"),project(gradThetaY, V_out, name="d/dy theta"), project(l_domFunction, V_out, name="l_dom"), time=t)
-
+#outfile_theta.write(outTheta1, outTheta2, outTheta3, outGradThetaX, outGradThetaY, outUadvX, outUadvY, outLdom, time=t)
+writeOutputMeshFunctions()
 
 
 
 
 
 ### output time functions ###
+t_i=0
+outfile_timeFunctions = File(output_dir_path + "/../data/temp/timeFunctions.pvd")
+
 
 meshTime = IntervalMesh(numberOfTimesteps+2, T_0, T_end)
 VecSpaceTime = VectorFunctionSpace(meshTime, "DG", 0)
 
 timeValuesTime = np.zeros(numberOfTimesteps+2)
-timeValuesTime[0] = T_0
-TimeFunctionTime = Function(VecSpaceTime,timeValuesTime[:])
+timeValuesTime[t_i] = T_0
+TimeFunctionTime = Function(VecSpaceTime,timeValuesTime[:],"time")
 
 L2timeValuesTheta = np.zeros(numberOfTimesteps+2)
-L2timeValuesTheta[0] = norm(ic_theta,"l2")
-L2normTimeFunctionTheta = Function(VecSpaceTime,L2timeValuesTheta[:])
+L2timeValuesTheta[t_i] = norm(theta,"l2")
+L2normTimeFunctionTheta = Function(VecSpaceTime,L2timeValuesTheta[:],"||theta||")
 
-L2timeValuesddxTheta = np.zeros(numberOfTimesteps+2)
-L2timeValuesddxTheta[0] = norm(gradThetaX,"l2")
-L2normTimeFunctionddxTheta = Function(VecSpaceTime,L2timeValuesddxTheta[:])
+L2timeValuesGradTheta = np.zeros(numberOfTimesteps+2)
+L2timeValuesGradTheta[t_i] = norm(project(grad(theta),V_vec),"l2")
+L2normTimeFunctionGradTheta = Function(VecSpaceTime,L2timeValuesGradTheta[:],"||grad theta||")
 
-L2timeValuesddyTheta = np.zeros(numberOfTimesteps+2)
-L2timeValuesddyTheta[0] = norm(gradThetaY,"l2")
-L2normTimeFunctionddyTheta = Function(VecSpaceTime,L2timeValuesddyTheta[:])
+Hminus1timeValuesTheta = np.zeros(numberOfTimesteps+2)
+Hminus1timeValuesTheta[t_i] = calcHminus1NormOfScalar(theta)
+Hminus1normTimeFunctionTheta = Function(VecSpaceTime,Hminus1timeValuesTheta[:],"||grad^-1 theta||")
 
-outfile_timeFunctions = File(output_dir_path + "/../data/temp/timeFunctions.pvd")
-outfile_timeFunctions.write(project(TimeFunctionTime, VecSpaceTime, name="time"),project(L2normTimeFunctionTheta, VecSpaceTime, name="theta L^2"),project(L2normTimeFunctionddxTheta, VecSpaceTime, name="d/dx Theta L^2"),project(L2normTimeFunctionddyTheta, VecSpaceTime, name="d/dy Theta L^2"), time=t)
+outfile_timeFunctions.write(TimeFunctionTime,L2normTimeFunctionTheta, L2normTimeFunctionGradTheta, Hminus1normTimeFunctionTheta, time=t)
 
-L2normTimeFunction = Function(VecSpaceTime,L2timeValuesTheta[:])
+
+
+
 
 
 
@@ -459,21 +499,10 @@ L2normTimeFunction = Function(VecSpaceTime,L2timeValuesTheta[:])
 ### copy script to save it ####
 copy(os.path.realpath(__file__), output_dir_path + "/../data/temp/0used_script.py")
 
-
-
-
-
-
-
-
-
-
-
 ### simulating ###
 
 timeStartSolving = datetime.datetime.now()
 lastRealTime = timeStartSolving
-t_i=0
 while (t < T_end):
     solver.solve()
     t += timestep
@@ -486,35 +515,44 @@ while (t < T_end):
         
     if forceZeroAverage:
         theta = getZeroAverageOfScalarFunction(theta)
-        
-    ### write output theta ###
-    gradTheta = project(grad(theta), V_vec)
-    gradThetaX.dat.data[:] = gradTheta.dat.data[:,0]
-    gradThetaY.dat.data[:] = gradTheta.dat.data[:,1]
-    #lapInvLapTheta = calcLaplacian(calcInverseLaplacian(theta))
-    tempTest3 = calcMilesOptimalFlowEnergyCase(theta)
-    tempTest1 = getComponentOfVectorFunction(tempTest3, 0)
-    tempTest2 = getComponentOfVectorFunction(tempTest3, 1)
-    if(t_i>10):
-        u_adv.assign(tempTest3)
-    outfile_theta.write(project(theta, V_out, name="theta"),project(theta, V_out, name="theta again"),project(tempTest1, V_out, name="test 1"),project(tempTest2, V_out, name="test 2"),project(gradThetaX, V_out, name="d/dx theta"),project(gradThetaY, V_out, name="d/dy theta"), project(l_domFunction, V_out, name="l_dom"), time=t)
     
+    if useMilesEnergyFlow:
+        MilesOptimalFlowEnergyCase = calcMilesOptimalFlowEnergyCase(theta)
+        if(t_i>timeStepsInitialUadv):
+            u_adv.assign(MilesOptimalFlowEnergyCase)
+    
+    
+    
+    
+    
+    
+    ##### outputs ###    
     
     ### write output time functions ###
     timeValuesTime[t_i] = t
-    TimeFunctionTime = Function(VecSpaceTime,timeValuesTime[:])
+    TimeFunctionTime = Function(VecSpaceTime,timeValuesTime[:],"time")
     
     L2timeValuesTheta[t_i] = norm(theta,"l2")
-    L2normTimeFunctionTheta = Function(VecSpaceTime,L2timeValuesTheta[:])
+    L2normTimeFunctionTheta = Function(VecSpaceTime,L2timeValuesTheta[:],"||theta||")
     
-    L2timeValuesddxTheta[t_i] = norm(gradThetaX,"l2")
-    L2normTimeFunctionddxTheta = Function(VecSpaceTime,L2timeValuesddxTheta[:])
+    L2timeValuesGradTheta[t_i] = norm(project(grad(theta),V_vec),"l2")
+    L2normTimeFunctionGradTheta = Function(VecSpaceTime,L2timeValuesGradTheta[:],"||grad theta||")
     
-    L2timeValuesddyTheta[t_i] = norm(gradThetaY,"l2")
-    L2normTimeFunctionddyTheta = Function(VecSpaceTime,L2timeValuesddyTheta[:])
+    Hminus1timeValuesTheta[t_i] = calcHminus1NormOfScalar(theta)
+    Hminus1normTimeFunctionTheta = Function(VecSpaceTime,Hminus1timeValuesTheta[:],"||grad^-1 theta||")
     
-    outfile_timeFunctions.write(project(TimeFunctionTime, VecSpaceTime, name="time"),project(L2normTimeFunctionTheta, VecSpaceTime, name="theta L^2"),project(L2normTimeFunctionddxTheta, VecSpaceTime, name="d/dx Theta L^2"),project(L2normTimeFunctionddyTheta, VecSpaceTime, name="d/dy Theta L^2"), time=t)
+    outfile_timeFunctions.write(TimeFunctionTime,L2normTimeFunctionTheta, L2normTimeFunctionGradTheta, Hminus1normTimeFunctionTheta, time=t)
     
+    #outfile_timeFunctions.write(project(TimeFunctionTime, VecSpaceTime, name="time"),project(L2normTimeFunctionTheta, VecSpaceTime, name="theta L^2"), project(L2normTimeFunctionGradTheta, VecSpaceTime, name="grad theta L^2"), time=t)
+
+
+    
+    ### write output mesh functions ###   
+    writeOutputMeshFunctions()
+
+
+
+
 
     print(np.round(t_i/numberOfTimesteps*100,2),"% ( step = ", t_i, " von ", numberOfTimesteps,", time t = ", np.round(t,4),") after ", datetime.datetime.now()-lastRealTime, ", estimated time left ", ((T_end-T_0)/t-1)*(datetime.datetime.now()-timeStartSolving)  )
     lastRealTime = datetime.datetime.now()
@@ -522,27 +560,4 @@ while (t < T_end):
 time_end = datetime.datetime.now()
 print("ending at ",time_end)
 print("total time ", time_end-time_start)
-
-
-
-##### old #####
-
-### log file ###
-if False:
-    logFile = open(output_dir_path + "/../data/temp/0log.txt","w") 
-    parametersString = ["# interval lengths","\nL_x = ",str(L_x),"\nL_y = ",str(L_y)]
-    parametersString += ["\n\n# spatial steps","\nn_x = ",str(n_x),"\nn_y = ",str(n_y)]
-    parametersString += ["\n\n# time steps","\nnumberOfTimesteps = ",str(numberOfTimesteps),"\nT_0 = ",str(T_0),"\nT_end = ",str(T_end)]
-    parametersString += ["\n\n# pde","\npdeShortName = ",str(pdeShortName)]
-    parametersString += ["\n\n# finite elements","\nfamily = ",finitEleFamily,"\ndegree = ",str(finitEleDegree)]
-    parametersString += ["\n\n# force 0 average after every step?","\nforceZeroAverage = ",str(forceZeroAverage)]
-    parametersString += ["\n\n# batchelor scale","\nl_bat = ",str(l_bat)]
-    parametersString += ["\n\n# time for simulation","\nstarting at ",str(time_start)]
-    logFile.writelines(parametersString)
-    logFile.close()
-    logFile = open(output_dir_path + "/../data/temp/0log.txt","a") 
-    parametersString += ["\nending at ",str(time_end),"\ntotal time in hh:min:sec = ",str(time_end-time_start)]
-    logFile.writelines(parametersString)
-    logFile.close()
-
 
