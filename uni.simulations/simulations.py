@@ -21,7 +21,6 @@ print(time_start,"starting ...")
 
 ### PARAMETERS ###
 
-#test2
 
 # interval lengths
 L = 1
