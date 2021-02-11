@@ -18,9 +18,10 @@ time_start = datetime.datetime.now()
 print(time_start,"starting ...")  
 
 
-#adsfsadf
 
 ### PARAMETERS ###
+
+#test2
 
 # interval lengths
 L = 1
