@@ -29,7 +29,7 @@ L_x = L
 L_y = L
 
 # spatial steps
-nProL = 64
+nProL = 128
 n_x = L_x*nProL
 n_y = L_y*nProL
 #n = 64*2
@@ -37,9 +37,9 @@ n_y = L_y*nProL
 #n_y = n
 
 # times
-numberOfTimestepsPerUnit = 200
-T_end = 1
-timeStepsInitialUadv = 20       ### for miles u_adv need a sine flow until t = 0.01 (otherwise stationary)
+numberOfTimestepsPerUnit = 100
+T_end = 13
+timeInitialUadv = 0.01      ### for miles u_adv need a sine flow until t = 0.01 (otherwise stationary)
 
 # pde name
 # list of available shortNames: nonLin, onlyAdv, advLap, advLap2, advLap2Lap, kuraSiva
@@ -54,7 +54,7 @@ finitEleDegree = 1
 forceZeroAverage = False
 
 # kappa in theta_t + < u_adv, grad theta> + kappa*laplace theta + laplace^2 theta = 0
-kappa = 1/32
+kappa = 1/2048
 
 ### initial condition ###
 ic_scale = 1
@@ -72,10 +72,11 @@ adv_freq = 1
 adv_freqX = adv_freq
 adv_freqY = adv_freq
 
-useMilesEnergyFlow = True
-
+useMilesEnergyFlow = False
+useMilesEnstrophyFlow = True
 ### rescale outputs -> \| . \|_2 = 1 ###
 rescaleOutputs = True
+inverseLaplacianEnforceAverageFreeAfter = True
 
 ### PARAMETERS END ###
 
@@ -86,7 +87,8 @@ rescaleOutputs = True
 
 T_0 = 0
 numberOfTimesteps = round(numberOfTimestepsPerUnit*(T_end-T_0))
-timestep = (T_end-T_0)/numberOfTimesteps
+timestepInitial = (T_end-T_0)/numberOfTimesteps
+timestep = timestepInitial
 
 # mesh = UnitSquareMesh(n, n)
 #mesh = PeriodicUnitSquareMesh(n,n)
@@ -150,6 +152,10 @@ def calcInverseLaplacian(function):
     testFunctionInvLap = TestFunction(V)
     F_invLap = (inner(grad(outFunction),grad(testFunctionInvLap))+dot(function,testFunctionInvLap))*dx
     solve(F_invLap == 0, outFunction)
+    if inverseLaplacianEnforceAverageFreeAfter:
+        if norm(getZeroAverageOfScalarFunction(outFunction)-outFunction,"l2")>0.01*((L_x*L_y)**0.5):
+            print("!!!warning!!! result of get inverse laplacian is non average free -> enforcing average free")
+        outFunction = getZeroAverageOfScalarFunction(outFunction)
     return outFunction
 ###################################
 def calcLaplacian(function):
@@ -192,6 +198,27 @@ def calcMilesOptimalFlowEnergyCase(function):
     retFunction = projection
     retFunction.dat.data[:] = normalisationFactor*projection.dat.data[:]
     return retFunction
+def calcMilesOptimalFlowEnstrophyCase(function):
+    funcFunction = project(function, V)
+    invLap = calcInverseLaplacian(funcFunction)
+    nablaInvLap = project(grad(invLap), V_vec)
+    functionNablaLapInvFunction = Function(V_vec)
+    functionNablaLapInvFunction.dat.data[:,0] = funcFunction.dat.data[:]*nablaInvLap.dat.data[:,0]
+    functionNablaLapInvFunction.dat.data[:,1] = funcFunction.dat.data[:]*nablaInvLap.dat.data[:,1]
+    projection = calcMilesLerayDivFreeProjector(functionNablaLapInvFunction)
+    projectionX = Function(V)
+    projectionY = Function(V)
+    projectionX.dat.data[:] = projection.dat.data[:,0]
+    projectionY.dat.data[:] = projection.dat.data[:,1]
+    minNablaInvunctionNablaLapInvFunction = Function(V_vec)
+    minNablaInvunctionNablaLapInvFunction.dat.data[:,0] = -calcInverseLaplacian(projectionX).dat.data[:]
+    minNablaInvunctionNablaLapInvFunction.dat.data[:,1] = -calcInverseLaplacian(projectionY).dat.data[:]
+    normalisationFactor = 1/(norm(grad(minNablaInvunctionNablaLapInvFunction),"l2"))            ### in the code of miles they somehow use curl instead of grad
+    #normalisationFactor = 1/(norm((minNablaInvunctionNablaLapInvFunction)))
+    #print(normalisationFactor)
+    retFunction = minNablaInvunctionNablaLapInvFunction
+    retFunction.dat.data[:] = normalisationFactor*minNablaInvunctionNablaLapInvFunction.dat.data[:]
+    return retFunction
 def calcDivMinus1ofScalar(function):
     # div^{-1} = div^{-1} divgrad laplace^{-1} = grad laplace^{-1}
     return project(grad(calcInverseLaplacian(function)),V_vec)
@@ -202,7 +229,7 @@ def getComponentOfVectorFunction(function, component):
     retFunction.assign(0)
     retFunction.dat.data[:] = function.dat.data[:,component]
     return retFunction
-def getOutputMeshFunction(function, name, value = None, component = -1):
+def getOutputMeshFunctionScalar(function, name, value = None, component = -1):
     if value != None:
         thisFunction = Function(V)
         thisFunction.assign(value)
@@ -222,19 +249,19 @@ def getOutputMeshFunction(function, name, value = None, component = -1):
     return retFunction
 def writeOutputMeshFunctions():
     
-    outTheta1 = getOutputMeshFunction(theta, "theta")
-    outTheta2 = getOutputMeshFunction(theta, "theta (2)")
-    outTheta3 = getOutputMeshFunction(theta, "theta (3)")
+    outTheta1 = getOutputMeshFunctionScalar(theta, "theta")
+    outTheta2 = getOutputMeshFunctionScalar(theta, "theta (2)")
+    outTheta3 = getOutputMeshFunctionScalar(theta, "theta (3)")
     
     gradTheta = project(grad(theta), V_vec)
-    outGradThetaX = getOutputMeshFunction(gradTheta, "d/dx theta", None, 0)
-    outGradThetaY = getOutputMeshFunction(gradTheta, "d/dy theta", None, 1)
+    outGradThetaX = getOutputMeshFunctionScalar(gradTheta, "d/dx theta", None, 0)
+    outGradThetaY = getOutputMeshFunctionScalar(gradTheta, "d/dy theta", None, 1)
     
-    outUadvX = getOutputMeshFunction(u_adv, "u_adv x", None, 0)
-    outUadvY = getOutputMeshFunction(u_adv, "u_adv y", None, 1)
+    outUadvX = getOutputMeshFunctionScalar(u_adv, "u_adv x", None, 0)
+    outUadvY = getOutputMeshFunctionScalar(u_adv, "u_adv y", None, 1)
     
     l_domFunction = Function(V).assign(l_dom)
-    outLdom = getOutputMeshFunction(None,"l_dominant", l_dom)
+    outLdom = getOutputMeshFunctionScalar(None,"l_dominant", l_dom)
 
     outfile_theta.write(outTheta1, outTheta2, outTheta3, outGradThetaX, outGradThetaY, outUadvX, outUadvY, outLdom, time=t)
 
@@ -484,11 +511,11 @@ Hminus1timeValuesTheta = np.zeros(numberOfTimesteps+2)
 Hminus1timeValuesTheta[t_i] = calcHminus1NormOfScalar(theta)
 Hminus1normTimeFunctionTheta = Function(VecSpaceTime,Hminus1timeValuesTheta[:],"||grad^-1 theta||")
 
-outfile_timeFunctions.write(TimeFunctionTime,L2normTimeFunctionTheta, L2normTimeFunctionGradTheta, Hminus1normTimeFunctionTheta, time=t)
+L2TimeValuesU_adv = np.zeros(numberOfTimesteps+2)
+L2TimeValuesU_adv[t_i] = norm(u_adv,"l2")
+L2normTimeFunctionU_adv = Function(VecSpaceTime,L2TimeValuesU_adv[:],"||u_adv||")
 
-
-
-
+outfile_timeFunctions.write(TimeFunctionTime,L2normTimeFunctionTheta, L2normTimeFunctionGradTheta, Hminus1normTimeFunctionTheta, L2normTimeFunctionU_adv, time=t)
 
 
 
@@ -505,8 +532,8 @@ timeStartSolving = datetime.datetime.now()
 lastRealTime = timeStartSolving
 while (t < T_end):
     solver.solve()
-    t += timestep
-    t_i += 1 
+    
+    
     if numberTestFunctions == 1:
         theta_old.assign(theta)
     else:
@@ -517,10 +544,33 @@ while (t < T_end):
         theta = getZeroAverageOfScalarFunction(theta)
     
     if useMilesEnergyFlow:
-        MilesOptimalFlowEnergyCase = calcMilesOptimalFlowEnergyCase(theta)
-        if(t_i>timeStepsInitialUadv):
-            u_adv.assign(MilesOptimalFlowEnergyCase)
+        if(t>=timeInitialUadv):
+            milesOptimalFlowEnergyCase = calcMilesOptimalFlowEnergyCase(theta)
+            u_adv.assign(milesOptimalFlowEnergyCase)
+            
+            ### cfl condition (assuming U = 1 (U = non scaled norm of flow in miles paper))
+            #if timestepInitial > (0.25* min(min(L_x,L_y)/(max(n_x,n_y)),(min(L_x,L_y)**2)/(kappa*(max(n_x,n_y)**2)))):
+            if False:
+                timestep = 0.25* min(min(L_x,L_y)/(max(n_x,n_y)),(min(L_x,L_y)**2)/(kappa*(max(n_x,n_y)**2)))
+                print("cfl condtion enforced, dt = ",timestep)
+            else:
+                timestep = timestepInitial
+                
+    if useMilesEnstrophyFlow:
+        if(t>=timeInitialUadv):
+            milesOptimalFlowEnstrophyCase = calcMilesOptimalFlowEnstrophyCase(theta)
+            u_adv.assign(milesOptimalFlowEnstrophyCase)
+            ### cfl condition (assuming Gamma = 1 (Gamma = non scaled norm of flow in miles paper))
+            ### is enforced by convergence anyways
+            #if timestepInitial > (0.25 * min(min(L_x,L_y)/(max(n_x,n_y)),(min(L_x,L_y)**2)/(kappa*(max(n_x,n_y)**2)))):
+            #    timestep = 0.25* min(min(L_x,L_y)/(max(n_x,n_y)),(min(L_x,L_y)**2)/(kappa*(max(n_x,n_y)**2)))
+            #    print("cfl condtion enforced, dt = ",timestep)
+            #else:
+            #    timestep = timestepInitial
+            
     
+    t_i += 1
+    t += timestep
     
     
     
@@ -541,7 +591,11 @@ while (t < T_end):
     Hminus1timeValuesTheta[t_i] = calcHminus1NormOfScalar(theta)
     Hminus1normTimeFunctionTheta = Function(VecSpaceTime,Hminus1timeValuesTheta[:],"||grad^-1 theta||")
     
-    outfile_timeFunctions.write(TimeFunctionTime,L2normTimeFunctionTheta, L2normTimeFunctionGradTheta, Hminus1normTimeFunctionTheta, time=t)
+    L2TimeValuesU_adv[t_i] = norm(u_adv,"l2")
+    L2normTimeFunctionU_adv = Function(VecSpaceTime,L2TimeValuesU_adv[:],"||u_adv||")
+
+    outfile_timeFunctions.write(TimeFunctionTime,L2normTimeFunctionTheta, L2normTimeFunctionGradTheta, Hminus1normTimeFunctionTheta, L2normTimeFunctionU_adv, time=t)
+    
     
     #outfile_timeFunctions.write(project(TimeFunctionTime, VecSpaceTime, name="time"),project(L2normTimeFunctionTheta, VecSpaceTime, name="theta L^2"), project(L2normTimeFunctionGradTheta, VecSpaceTime, name="grad theta L^2"), time=t)
 
@@ -560,4 +614,3 @@ while (t < T_end):
 time_end = datetime.datetime.now()
 print("ending at ",time_end)
 print("total time ", time_end-time_start)
-
