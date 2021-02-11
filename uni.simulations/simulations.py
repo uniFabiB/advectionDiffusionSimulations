@@ -37,7 +37,7 @@ n_y = L_y*nProL
 #n_y = n
 
 # times
-numberOfTimestepsPerUnit = 100
+numberOfTimestepsPerUnit = 1000
 T_end = 13
 timeInitialUadv = 0.01      ### for miles u_adv need a sine flow until t = 0.01 (otherwise stationary)
 
@@ -72,8 +72,10 @@ adv_freq = 1
 adv_freqX = adv_freq
 adv_freqY = adv_freq
 
-useMilesEnergyFlow = False
-useMilesEnstrophyFlow = True
+
+# pde name
+# list of available flows: milesEnergy, milesEnstrophy, test, none (anything else for just initial)
+usedFlow = "milesEnstrophy"
 ### rescale outputs -> \| . \|_2 = 1 ###
 rescaleOutputs = True
 inverseLaplacianEnforceAverageFreeAfter = True
@@ -532,6 +534,8 @@ timeStartSolving = datetime.datetime.now()
 lastRealTime = timeStartSolving
 while (t < T_end):
     solver.solve()
+    t_i += 1
+    t += timestep
     
     
     if numberTestFunctions == 1:
@@ -542,36 +546,18 @@ while (t < T_end):
         
     if forceZeroAverage:
         theta = getZeroAverageOfScalarFunction(theta)
-    
-    if useMilesEnergyFlow:
+        
+    if usedFlow in ['milesEnergy']:
         if(t>=timeInitialUadv):
             milesOptimalFlowEnergyCase = calcMilesOptimalFlowEnergyCase(theta)
             u_adv.assign(milesOptimalFlowEnergyCase)
-            
-            ### cfl condition (assuming U = 1 (U = non scaled norm of flow in miles paper))
-            #if timestepInitial > (0.25* min(min(L_x,L_y)/(max(n_x,n_y)),(min(L_x,L_y)**2)/(kappa*(max(n_x,n_y)**2)))):
-            if False:
-                timestep = 0.25* min(min(L_x,L_y)/(max(n_x,n_y)),(min(L_x,L_y)**2)/(kappa*(max(n_x,n_y)**2)))
-                print("cfl condtion enforced, dt = ",timestep)
-            else:
-                timestep = timestepInitial
-                
-    if useMilesEnstrophyFlow:
+    elif usedFlow in ['milesEnstrophy']:
         if(t>=timeInitialUadv):
             milesOptimalFlowEnstrophyCase = calcMilesOptimalFlowEnstrophyCase(theta)
             u_adv.assign(milesOptimalFlowEnstrophyCase)
-            ### cfl condition (assuming Gamma = 1 (Gamma = non scaled norm of flow in miles paper))
-            ### is enforced by convergence anyways
-            #if timestepInitial > (0.25 * min(min(L_x,L_y)/(max(n_x,n_y)),(min(L_x,L_y)**2)/(kappa*(max(n_x,n_y)**2)))):
-            #    timestep = 0.25* min(min(L_x,L_y)/(max(n_x,n_y)),(min(L_x,L_y)**2)/(kappa*(max(n_x,n_y)**2)))
-            #    print("cfl condtion enforced, dt = ",timestep)
-            #else:
-            #    timestep = timestepInitial
-            
-    
-    t_i += 1
-    t += timestep
-    
+    elif usedFlow in ['test']:
+        if(t>=timeInitialUadv):
+            print("todo")
     
     
     
@@ -614,3 +600,4 @@ while (t < T_end):
 time_end = datetime.datetime.now()
 print("ending at ",time_end)
 print("total time ", time_end-time_start)
+
