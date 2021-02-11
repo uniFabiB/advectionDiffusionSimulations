@@ -80,6 +80,10 @@ usedFlow = "milesEnstrophy"
 rescaleOutputs = True
 inverseLaplacianEnforceAverageFreeAfter = True
 
+### write output only every ... time intervals to save storage space
+writeOutputEvery = 0.01                # 0 -> every time,
+ 
+
 ### PARAMETERS END ###
 
 
@@ -532,6 +536,7 @@ copy(os.path.realpath(__file__), output_dir_path + "/../data/temp/0used_script.p
 
 timeStartSolving = datetime.datetime.now()
 lastRealTime = timeStartSolving
+lastWrittenOutput = 0
 while (t < T_end):
     solver.solve()
     t_i += 1
@@ -562,33 +567,32 @@ while (t < T_end):
     
     
     
-    ##### outputs ###    
+    ##### outputs ###
+    if t > lastWrittenOutput + writeOutputEvery:
+        lastWrittenOutput = t
+        ### write output time functions ###
+        timeValuesTime[t_i] = t
+        TimeFunctionTime = Function(VecSpaceTime,timeValuesTime[:],"time")
     
-    ### write output time functions ###
-    timeValuesTime[t_i] = t
-    TimeFunctionTime = Function(VecSpaceTime,timeValuesTime[:],"time")
+        L2timeValuesTheta[t_i] = norm(theta,"l2")
+        L2normTimeFunctionTheta = Function(VecSpaceTime,L2timeValuesTheta[:],"||theta||")
     
-    L2timeValuesTheta[t_i] = norm(theta,"l2")
-    L2normTimeFunctionTheta = Function(VecSpaceTime,L2timeValuesTheta[:],"||theta||")
+        L2timeValuesGradTheta[t_i] = norm(project(grad(theta),V_vec),"l2")
+        L2normTimeFunctionGradTheta = Function(VecSpaceTime,L2timeValuesGradTheta[:],"||grad theta||")
     
-    L2timeValuesGradTheta[t_i] = norm(project(grad(theta),V_vec),"l2")
-    L2normTimeFunctionGradTheta = Function(VecSpaceTime,L2timeValuesGradTheta[:],"||grad theta||")
-    
-    Hminus1timeValuesTheta[t_i] = calcHminus1NormOfScalar(theta)
-    Hminus1normTimeFunctionTheta = Function(VecSpaceTime,Hminus1timeValuesTheta[:],"||grad^-1 theta||")
-    
-    L2TimeValuesU_adv[t_i] = norm(u_adv,"l2")
-    L2normTimeFunctionU_adv = Function(VecSpaceTime,L2TimeValuesU_adv[:],"||u_adv||")
+        Hminus1timeValuesTheta[t_i] = calcHminus1NormOfScalar(theta)
+        Hminus1normTimeFunctionTheta = Function(VecSpaceTime,Hminus1timeValuesTheta[:],"||grad^-1 theta||")
+        
+        L2TimeValuesU_adv[t_i] = norm(u_adv,"l2")
+        L2normTimeFunctionU_adv = Function(VecSpaceTime,L2TimeValuesU_adv[:],"||u_adv||")
+        
+        outfile_timeFunctions.write(TimeFunctionTime,L2normTimeFunctionTheta, L2normTimeFunctionGradTheta, Hminus1normTimeFunctionTheta, L2normTimeFunctionU_adv, time=t)
+        #outfile_timeFunctions.write(project(TimeFunctionTime, VecSpaceTime, name="time"),project(L2normTimeFunctionTheta, VecSpaceTime, name="theta L^2"), project(L2normTimeFunctionGradTheta, VecSpaceTime, name="grad theta L^2"), time=t)
 
-    outfile_timeFunctions.write(TimeFunctionTime,L2normTimeFunctionTheta, L2normTimeFunctionGradTheta, Hminus1normTimeFunctionTheta, L2normTimeFunctionU_adv, time=t)
-    
-    
-    #outfile_timeFunctions.write(project(TimeFunctionTime, VecSpaceTime, name="time"),project(L2normTimeFunctionTheta, VecSpaceTime, name="theta L^2"), project(L2normTimeFunctionGradTheta, VecSpaceTime, name="grad theta L^2"), time=t)
-
 
     
-    ### write output mesh functions ###   
-    writeOutputMeshFunctions()
+        ### write output mesh functions ###   
+        writeOutputMeshFunctions()
 
 
 
