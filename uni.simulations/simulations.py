@@ -39,7 +39,7 @@ n_y = L_y*nProL
 # times
 numberOfTimestepsPerUnit = 1000
 T_end = 13
-timeInitialUadv = 0.01      ### for miles u_adv need a sine flow until t = 0.01 (otherwise stationary)
+timeInitialUadv = 0.01      ### for miles u_adv need a sine flow until t = 0.01 (otherwise get a stationary solution)
 
 # pde name
 # list of available shortNames: nonLin, onlyAdv, advLap, advLap2, advLap2Lap, kuraSiva
