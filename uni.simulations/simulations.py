@@ -10,6 +10,7 @@ from shutil import copy
 from ufl.tensors import as_scalar
 from ufl.operators import div, grad
 from ufl import indexed
+from cmath import sqrt
 
 
 
@@ -53,7 +54,7 @@ finitEleDegree = 1
 forceZeroAverage = False
 
 # kappa in theta_t + < u_adv, grad theta> + kappa*laplace theta + laplace^2 theta = 0
-kappa = 1/2048
+kappa = 1/4
 
 ### initial condition ###
 ic_scale = 1
@@ -73,14 +74,15 @@ adv_freqY = adv_freq
 
 
 # pde name
-# list of available flows: milesEnergy, milesEnstrophy, test, none (anything else for just initial)
-usedFlow = "milesEnstrophy"
+# list of available flows: milesEnergy, milesEnstrophy, camillaTestFlow, none (anything else for just initial)
+usedFlow = "camillaTestFlow"
 ### rescale outputs -> \| . \|_2 = 1 ###
 rescaleOutputs = True
+inverseLaplacianEnforceAverageFreeBefore = True
 inverseLaplacianEnforceAverageFreeAfter = True
 
 ### write output only every ... time intervals to save storage space
-writeOutputEvery = 0.01                # 0 -> every time,
+writeOutputEvery = 0.01             # 0 -> every time,
  
 
 ### PARAMETERS END ###
@@ -151,7 +153,10 @@ def calcInverseLaplacian(function):
     # <-grad u, grad v> - <f,v> = 0
     # <grad u, grad v> + <f,v> = 0 
     #print("1",function.dat.data)
-    
+    if inverseLaplacianEnforceAverageFreeBefore:
+        if norm(getZeroAverageOfScalarFunction(function)-function,"l2")>0.01*((L_x*L_y)**0.5):
+            print("!!!warning!!! initial data of get inverse laplacian is non average free -> enforcing average free")
+        function = getZeroAverageOfScalarFunction(function)
     
     outFunction = Function(V)
     testFunctionInvLap = TestFunction(V)
@@ -168,9 +173,13 @@ def calcLaplacian(function):
     return project(div(gradFunction),V)
 ###################################
 def getZeroAverageOfScalarFunction(function):
-    sum = np.sum(function.dat.data)
-    function.dat.data[:] = function.dat.data[:]-sum/(n_x*n_y)
-    return function
+    if isinstance(function, Function):
+        thisFunction = function
+    else:
+        thisFunction = project(function,V)      ### when indexed for example theta, theta_laplace = w.split() then theta is not a function but rather Indexed: w_20[0] or something like this
+    sum = np.sum(thisFunction.dat.data)
+    thisFunction.dat.data[:] = thisFunction.dat.data[:]-sum/(n_x*n_y)
+    return thisFunction
 ###################################
 ### now miles flow ###
 ### page 40 https://deepblue.lib.umich.edu/bitstream/handle/2027.42/143927/cmiless_1.pdf?sequence=1
@@ -198,7 +207,7 @@ def calcMilesOptimalFlowEnergyCase(function):
     functionNablaLapInvFunction.dat.data[:,1] = funcFunction.dat.data[:]*nablaInvLap.dat.data[:,1]
     projection = calcMilesLerayDivFreeProjector(functionNablaLapInvFunction)
     #normalisationFactor = 1/((calcSpatialAverage(calcAbsOfVectorFunction(projection))**2)**(1/2))
-    normalisationFactor = 1/(norm(projection,"l2"))
+    normalisationFactor = abs(sqrt(L_x*L_y))/(norm(projection,"l2"))
     #print(normalisationFactor)
     retFunction = projection
     retFunction.dat.data[:] = normalisationFactor*projection.dat.data[:]
@@ -218,12 +227,78 @@ def calcMilesOptimalFlowEnstrophyCase(function):
     minNablaInvunctionNablaLapInvFunction = Function(V_vec)
     minNablaInvunctionNablaLapInvFunction.dat.data[:,0] = -calcInverseLaplacian(projectionX).dat.data[:]
     minNablaInvunctionNablaLapInvFunction.dat.data[:,1] = -calcInverseLaplacian(projectionY).dat.data[:]
-    normalisationFactor = 1/(norm(grad(minNablaInvunctionNablaLapInvFunction),"l2"))            ### in the code of miles they somehow use curl instead of grad
+    normalisationFactor = abs(sqrt(L_x*L_y))/(norm(grad(minNablaInvunctionNablaLapInvFunction),"l2"))            ### in the code of miles they somehow use curl instead of grad
     #normalisationFactor = 1/(norm((minNablaInvunctionNablaLapInvFunction)))
     #print(normalisationFactor)
     retFunction = minNablaInvunctionNablaLapInvFunction
     retFunction.dat.data[:] = normalisationFactor*minNablaInvunctionNablaLapInvFunction.dat.data[:]
     return retFunction
+UinMiles = 0
+GammaInMiles = 0
+tauInMiles = 0
+l_bat = 0
+l_dom = 0
+l_root = 0
+def calcConstants_batscaleGammaUmiles():
+    ### recalculates the constants (batchelor scale, Gamma, U(in miles), tau, dominant wavelength for lap2lap 
+    global UinMiles
+    global GammaInMiles
+    global tauInMiles
+    global l_bat
+    global l_dom
+    global l_root
+    
+    # miles p 5
+    UinMiles = abs(norm(u_adv,"l2")/(sqrt(L_x*L_y)))
+    GammaInMiles = abs(norm(grad(u_adv),"l2")/(sqrt(L_x*L_y)))
+    # irgendwie erkennt es sqrt variables immer als komplexe zahlen mit im part 0 an ...
+    
+    # miles p 16
+    tauInMiles = 1/GammaInMiles
+    # miles p 34
+    if usedFlow in ['milesEnergy']:
+        # miles: 
+        l_bat = 3/2*kappa/UinMiles
+    elif usedFlow in ['milesEnstrophy']:
+        l_bat = abs(sqrt(3/2*kappa*tauInMiles))
+    else:
+        ### default energy but to see that it is strange put it negativ
+        l_bat = -(3/2*kappa/UinMiles)
+    
+    if pdeShortName in ['advLap2Lap', 'kuraSiva']:
+        # irgendwie erkennt es sqrt variables immer als komplexe zahlen mit im part 0 an ...
+        l_dom = abs(2*sqrt(2)*pi)
+        l_root = abs(2*pi)
+    else:
+        ### doesn't make sense but still compute and put - to indicate something strange
+        l_dom = - abs(2*sqrt(2)*pi)
+        l_root = - abs(2*pi)
+        
+        
+def calcCdotOfVectors(f,g):
+    result = Function(V)
+    result.dat.data[:] = f.dat.data[:,0]*g.dat.data[:,0]+f.dat.data[:,1]*g.dat.data[:,1]
+    return result
+def calcCamillaTestFlow(function):
+    #u_adv = theta nalba^-1 theta - nabla^-1(nabla theta cdot nabla^-1 theta) - nabla^-1 (theta^2)
+    nablaMinusOneFunction = calcDivMinus1ofScalar(function)
+    GradFunction = project(grad(function),V_vec)
+    functionSq = Function(V)
+    functionSq.dat.data[:] = function.dat.data[:]**2
+    
+    firstTerm = Function(V_vec)
+    firstTerm.dat.data[:,0] = function.dat.data[:]*nablaMinusOneFunction.dat.data[:,0]
+    firstTerm.dat.data[:,1] = function.dat.data[:]*nablaMinusOneFunction.dat.data[:,1]
+    
+    secondTerm = calcDivMinus1ofScalar(calcCdotOfVectors(GradFunction, nablaMinusOneFunction)) 
+    
+    thirdTerm = calcDivMinus1ofScalar(functionSq)
+    
+    result = Function(V_vec)
+    result.dat.data[:] = firstTerm.dat.data[:]-secondTerm.dat.data[:]-thirdTerm.dat.data[:]
+    result.dat.data[:] = result.dat.data[:]/norm(result,"l2") 
+    return result 
+    
 def calcDivMinus1ofScalar(function):
     # div^{-1} = div^{-1} divgrad laplace^{-1} = grad laplace^{-1}
     return project(grad(calcInverseLaplacian(function)),V_vec)
@@ -255,8 +330,8 @@ def getOutputMeshFunctionScalar(function, name, value = None, component = -1):
 def writeOutputMeshFunctions():
     
     outTheta1 = getOutputMeshFunctionScalar(theta, "theta")
-    outTheta2 = getOutputMeshFunctionScalar(theta, "theta (2)")
-    outTheta3 = getOutputMeshFunctionScalar(theta, "theta (3)")
+    #outTheta2 = getOutputMeshFunctionScalar(theta, "theta (2)")
+    #outTheta3 = getOutputMeshFunctionScalar(theta, "theta (3)")
     
     gradTheta = project(grad(theta), V_vec)
     outGradThetaX = getOutputMeshFunctionScalar(gradTheta, "d/dx theta", None, 0)
@@ -265,10 +340,11 @@ def writeOutputMeshFunctions():
     outUadvX = getOutputMeshFunctionScalar(u_adv, "u_adv x", None, 0)
     outUadvY = getOutputMeshFunctionScalar(u_adv, "u_adv y", None, 1)
     
-    l_domFunction = Function(V).assign(l_dom)
-    outLdom = getOutputMeshFunctionScalar(None,"l_dominant", l_dom)
+    #l_domFunction = Function(V).assign(l_dom)
+    #outLdom = getOutputMeshFunctionScalar(None,"l_dominant", l_dom)
 
-    outfile_theta.write(outTheta1, outTheta2, outTheta3, outGradThetaX, outGradThetaY, outUadvX, outUadvY, outLdom, time=t)
+    #outfile_theta.write(outTheta1, outTheta2, outTheta3, outGradThetaX, outGradThetaY, outUadvX, outUadvY, outLdom, time=t)
+    outfile_theta.write(outTheta1, outGradThetaX, outGradThetaY, outUadvX, outUadvY, time=t)
 
 
 
@@ -435,40 +511,6 @@ print(datetime.datetime.now(),"variational problem defined")
 
 
 
-### batchelor scale ###
-### WRONG BATCHELOR SCALE IS L_BAT = (KAPPA / \| \nabla u_adv\|)**(1/2) BUT ONLY FOR adv diff pde (advection heat equation) where kappa laplace theta
-if False:
-    # force rescale u_adv -> l_bat = 1    (rescales the amplitude)
-    forceBatScale = False
-    forcedBatScale = 30
-    
-    if norm(grad(u_adv),"l2") == 0:
-        print("advection = 0 -> setting l_bat = 0")
-        l_bat = 0
-    else:
-        if forceBatScale:
-            print("l2 of grad u_adv (non rescaled)", str(norm(grad(u_adv),"l2")))
-            l_bat = sqrt(kappa/(norm(grad(u_adv),"l2")))
-            print("l_bat (non rescaled)", str(l_bat))
-            rescaleFactor = kappa/(norm(grad(u_adv),"l2"))/(forcedBatScale**2)
-            print("rescale factor ",str(rescaleFactor))
-            u_adv.dat.data[:] = rescaleFactor*u_adv.dat.data[:]
-        l_bat = sqrt(kappa/(norm(grad(u_adv),"l2")))
-    
-    print("batchelor scale l_bat=",str(l_bat))
-    l_batFunction = Function(V_out)
-    l_batFunction.assign(l_bat)
-
-
-if kappa != 0:
-    l_dom = (2*sqrt(2)*pi)*(kappa**(-1/2))
-else:
-    l_dom = 0
-print("dominant wavelength (of laplace laplace^2) l_dom=",str(l_dom))
-
-
-
-
 
 
 
@@ -494,33 +536,58 @@ writeOutputMeshFunctions()
 
 ### output time functions ###
 t_i=0
+t_iOutput = t_i
 outfile_timeFunctions = File(output_dir_path + "/../data/temp/timeFunctions.pvd")
 
+numberOfOutputTimeSteps = np.ceil((T_end-T_0)/writeOutputEvery).astype(int)
+numberOfValuesInTimeFunctions = numberOfOutputTimeSteps+1
 
-meshTime = IntervalMesh(numberOfTimesteps+2, T_0, T_end)
-VecSpaceTime = VectorFunctionSpace(meshTime, "DG", 0)
+meshTime = IntervalMesh(numberOfOutputTimeSteps, T_0, T_end)
+VecSpaceTime = VectorFunctionSpace(meshTime, "CG", 1)
 
-timeValuesTime = np.zeros(numberOfTimesteps+2)
-timeValuesTime[t_i] = T_0
+timeValuesTime = np.zeros(numberOfValuesInTimeFunctions)
+timeValuesTime[t_iOutput] = T_0
 TimeFunctionTime = Function(VecSpaceTime,timeValuesTime[:],"time")
 
-L2timeValuesTheta = np.zeros(numberOfTimesteps+2)
-L2timeValuesTheta[t_i] = norm(theta,"l2")
+L2timeValuesTheta = np.zeros(numberOfValuesInTimeFunctions)
+L2timeValuesTheta[t_iOutput] = norm(theta,"l2")
 L2normTimeFunctionTheta = Function(VecSpaceTime,L2timeValuesTheta[:],"||theta||")
 
-L2timeValuesGradTheta = np.zeros(numberOfTimesteps+2)
-L2timeValuesGradTheta[t_i] = norm(project(grad(theta),V_vec),"l2")
+L2timeValuesGradTheta = np.zeros(numberOfValuesInTimeFunctions)
+L2timeValuesGradTheta[t_iOutput] = norm(project(grad(theta),V_vec),"l2")
 L2normTimeFunctionGradTheta = Function(VecSpaceTime,L2timeValuesGradTheta[:],"||grad theta||")
 
-Hminus1timeValuesTheta = np.zeros(numberOfTimesteps+2)
-Hminus1timeValuesTheta[t_i] = calcHminus1NormOfScalar(theta)
+Hminus1timeValuesTheta = np.zeros(numberOfValuesInTimeFunctions)
+Hminus1timeValuesTheta[t_iOutput] = calcHminus1NormOfScalar(theta)
 Hminus1normTimeFunctionTheta = Function(VecSpaceTime,Hminus1timeValuesTheta[:],"||grad^-1 theta||")
 
-L2TimeValuesU_adv = np.zeros(numberOfTimesteps+2)
-L2TimeValuesU_adv[t_i] = norm(u_adv,"l2")
+Hminus1OverL2timeValuesTheta = np.zeros(numberOfValuesInTimeFunctions)
+Hminus1OverL2timeValuesTheta[t_iOutput] = Hminus1timeValuesTheta[t_iOutput]/L2timeValuesGradTheta[t_iOutput]
+Hminus1OverL2TimeFunctionTheta = Function(VecSpaceTime,Hminus1OverL2timeValuesTheta[:],"||grad^-1 theta||/||theta||")
+
+L2TimeValuesU_adv = np.zeros(numberOfValuesInTimeFunctions)
+L2TimeValuesU_adv[t_iOutput] = norm(u_adv,"l2")
 L2normTimeFunctionU_adv = Function(VecSpaceTime,L2TimeValuesU_adv[:],"||u_adv||")
 
-outfile_timeFunctions.write(TimeFunctionTime,L2normTimeFunctionTheta, L2normTimeFunctionGradTheta, Hminus1normTimeFunctionTheta, L2normTimeFunctionU_adv, time=t)
+
+calcConstants_batscaleGammaUmiles()
+print("l_dom", l_dom)
+print("l_root", l_root)
+print("l_bat", l_bat)
+        
+lDomTimeValues = np.zeros(numberOfValuesInTimeFunctions)
+lDomTimeValues[t_iOutput] = l_dom
+lDomTimeFunction = Function(VecSpaceTime,lDomTimeValues[:],"l_dom")
+
+lBatTimeValues = np.zeros(numberOfValuesInTimeFunctions)
+lBatTimeValues[t_iOutput] = l_bat
+lBatTimeFunction = Function(VecSpaceTime,lBatTimeValues[:],"l_bat")
+
+lRootTimeValues = np.zeros(numberOfValuesInTimeFunctions)
+lRootTimeValues[t_iOutput] = l_root
+lRootTimeFunction = Function(VecSpaceTime,lRootTimeValues[:],"l_rootLapLap2")
+
+outfile_timeFunctions.write(TimeFunctionTime,L2normTimeFunctionTheta, L2normTimeFunctionGradTheta, Hminus1normTimeFunctionTheta, Hminus1OverL2TimeFunctionTheta, L2normTimeFunctionU_adv, lBatTimeFunction, lDomTimeFunction, lRootTimeFunction, time=t)
 
 
 
@@ -559,33 +626,56 @@ while (t < T_end):
         if(t>=timeInitialUadv):
             milesOptimalFlowEnstrophyCase = calcMilesOptimalFlowEnstrophyCase(theta)
             u_adv.assign(milesOptimalFlowEnstrophyCase)
-    elif usedFlow in ['test']:
+    elif usedFlow in ['camillaTestFlow']:
         if(t>=timeInitialUadv):
-            print("todo")
+            camillaTestFlow = calcCamillaTestFlow(theta)
+            u_adv.assign(camillaTestFlow)
     
     
     
     
     ##### outputs ###
-    if t > lastWrittenOutput + writeOutputEvery:
+    if t >= lastWrittenOutput + writeOutputEvery:
         lastWrittenOutput = t
+        t_iOutput += 1
         ### write output time functions ###
-        timeValuesTime[t_i] = t
+        timeValuesTime[t_iOutput] = t
         TimeFunctionTime = Function(VecSpaceTime,timeValuesTime[:],"time")
     
-        L2timeValuesTheta[t_i] = norm(theta,"l2")
+        L2normTheta = norm(theta,"l2")
+        L2timeValuesTheta[t_iOutput] = L2normTheta
         L2normTimeFunctionTheta = Function(VecSpaceTime,L2timeValuesTheta[:],"||theta||")
     
-        L2timeValuesGradTheta[t_i] = norm(project(grad(theta),V_vec),"l2")
+        L2timeValuesGradTheta[t_iOutput] = norm(project(grad(theta),V_vec),"l2")
         L2normTimeFunctionGradTheta = Function(VecSpaceTime,L2timeValuesGradTheta[:],"||grad theta||")
     
-        Hminus1timeValuesTheta[t_i] = calcHminus1NormOfScalar(theta)
+        Hminus1normTheta = calcHminus1NormOfScalar(theta)
+        Hminus1timeValuesTheta[t_iOutput] = Hminus1normTheta
         Hminus1normTimeFunctionTheta = Function(VecSpaceTime,Hminus1timeValuesTheta[:],"||grad^-1 theta||")
         
-        L2TimeValuesU_adv[t_i] = norm(u_adv,"l2")
+        Hminus1OverL2timeValuesTheta[t_iOutput] = Hminus1normTheta/L2normTheta
+        Hminus1OverL2TimeFunctionTheta = Function(VecSpaceTime,Hminus1OverL2timeValuesTheta[:],"||grad^-1 theta||/||theta||")
+        
+        L2TimeValuesU_adv[t_iOutput] = norm(u_adv,"l2")
         L2normTimeFunctionU_adv = Function(VecSpaceTime,L2TimeValuesU_adv[:],"||u_adv||")
         
-        outfile_timeFunctions.write(TimeFunctionTime,L2normTimeFunctionTheta, L2normTimeFunctionGradTheta, Hminus1normTimeFunctionTheta, L2normTimeFunctionU_adv, time=t)
+        
+        calcConstants_batscaleGammaUmiles()
+        
+        lDomTimeValues[t_iOutput] = l_dom
+        lDomTimeFunction = Function(VecSpaceTime,lDomTimeValues[:],"l_dom")
+        
+        lBatTimeValues[t_iOutput] = l_bat
+        lBatTimeFunction = Function(VecSpaceTime,lBatTimeValues[:],"l_bat")
+        
+        lRootTimeValues[t_iOutput] = l_root
+        lRootTimeFunction = Function(VecSpaceTime,lRootTimeValues[:],"l_rootLapLap2")
+
+
+
+
+        outfile_timeFunctions.write(TimeFunctionTime,L2normTimeFunctionTheta, L2normTimeFunctionGradTheta, Hminus1normTimeFunctionTheta, Hminus1OverL2TimeFunctionTheta, L2normTimeFunctionU_adv, lBatTimeFunction, lDomTimeFunction, lRootTimeFunction, time=t)
+        #outfile_timeFunctions.write(TimeFunctionTime,L2normTimeFunctionTheta, L2normTimeFunctionGradTheta, Hminus1normTimeFunctionTheta, L2normTimeFunctionU_adv, time=t)
         #outfile_timeFunctions.write(project(TimeFunctionTime, VecSpaceTime, name="time"),project(L2normTimeFunctionTheta, VecSpaceTime, name="theta L^2"), project(L2normTimeFunctionGradTheta, VecSpaceTime, name="grad theta L^2"), time=t)
 
 
