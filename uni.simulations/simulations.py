@@ -24,12 +24,12 @@ print(time_start,"starting ...")
 
 
 # interval lengths
-L = 1
+L = 4
 L_x = L
 L_y = L
 
 # spatial steps
-nProL = 128
+nProL = 64
 n_x = L_x*nProL
 n_y = L_y*nProL
 #n = 64*2
@@ -37,9 +37,9 @@ n_y = L_y*nProL
 #n_y = n
 
 # times
-numberOfTimestepsPerUnit = 1000
-T_end = 13
-timeInitialUadv = 0.01      ### for miles u_adv need a sine flow until t = 0.01 (otherwise get a stationary solution)
+numberOfTimestepsPerUnit = 200
+T_end = 10.1
+timeInitialUadv = 0.001      ### for miles u_adv need a sine flow until t = 0.01 (otherwise get a stationary solution)
 
 # pde name
 # list of available shortNames: nonLin, onlyAdv, advLap, advLap2, advLap2Lap, kuraSiva
@@ -54,7 +54,7 @@ finitEleDegree = 1
 forceZeroAverage = False
 
 # kappa in theta_t + < u_adv, grad theta> + kappa*laplace theta + laplace^2 theta = 0
-kappa = 1/4
+kappa = 1/256
 
 ### initial condition ###
 ic_scale = 1
@@ -65,24 +65,27 @@ randomIC = False
 
 ### advection ###
 advZero = False
-adv_scale = 1
+adv_scale = 4
 adv_scaleX = adv_scale
 adv_scaleY = adv_scale
 adv_freq = 1
 adv_freqX = adv_freq
 adv_freqY = adv_freq
 
+### c term ### theta_t = kappa lap theta + u . grad theta + c theta
+c = 0           # for constant c
+#manuell unten sinus in y richtung
 
 # pde name
-# list of available flows: milesEnergy, milesEnstrophy, camillaTestFlow, none (anything else for just initial)
-usedFlow = "camillaTestFlow"
+# list of available flows: milesEnergy, milesEnstrophy, camillaTestFlow, zero, test, (anything else for the initial flow)
+usedFlow = "milesEnstrophy"
 ### rescale outputs -> \| . \|_2 = 1 ###
 rescaleOutputs = True
 inverseLaplacianEnforceAverageFreeBefore = True
 inverseLaplacianEnforceAverageFreeAfter = True
 
 ### write output only every ... time intervals to save storage space
-writeOutputEvery = 0.01             # 0 -> every time,
+writeOutputEvery = 0.02             # 0 -> every time,
  
 
 ### PARAMETERS END ###
@@ -110,13 +113,35 @@ x, y = SpatialCoordinate(mesh)
 print(datetime.datetime.now(),"spaces defined")  
 
 
+
+
+### c term ###
+cFunktion = Function(V)
+cFunktion.assign(c)
+
+#cFunktion = Function(V)
+#cRandom = ic_scale*(2*np.random.rand(n_x*n_y)-1)       # 2*... - 1 -> -1 und 1
+
+#cFunktion = Function(V,cRandom)
+#cFunktion.interpolate(sin(2*pi*y/L_y))
+
+#cFunktion = Function(V,cRandom)
+#cFunktion.interpolate(sin(2*pi*0)*sin(2*pi*x/L_x)+cos(2*pi*0)*sin(2*pi*y/L_y))  #for a plot see mathematica: "Manipulate[ Plot3D[Sin[(2*Pi*t)]* Sin[2*Pi*x] + Cos[(2*Pi*t)]* Sin[2*Pi*y], {x,  0, 1}, {y, 0, 1}], {t, 0, 1}]"
+
+#cFunktion = Function(V)
+#cFunktion.interpolate(4*exp(-8*((x/L_x-0.5)**2+(y/L_y-0.5)**2)))                   #for a plot see mathematica: "Plot3D[4*Exp[-8*((x - 0.5)^2 + (y - 0.5)^2)], {x, 0, 1}, {y, 0, 1}]"
+
+
+
+
+
 ### initial data ###
 ic_theta = Function(V)
 
-ic_theta.interpolate(ic_scale*sin(ic_freq_x*2*pi*x/L_x))
+#ic_theta.interpolate(ic_scale*sin(ic_freq_x*2*pi*x/L_x)*sin(ic_freq_y*2*pi*y/L_y))
 #ic_theta.interpolate(ic_scale*e**(-ic_freq_x*((x-L_x/2)/L_x)**2-ic_freq_y*((y-L_y/2)/L_y)**2))
-#ic_theta.interpolate(-scale*cos(freq_x*2*pi*x/L_x))
-#ic_theta.interpolate(-scale*cos(freq_y*2*pi*y/L_y))
+ic_theta.interpolate(-ic_scale*sin(ic_freq_x*2*pi*x/L_x))
+#ic_theta.interpolate(-scale*sin(ic_freq_y*2*pi*y/L_y))
 
 ### random initial data ###
 if randomIC:
@@ -126,6 +151,9 @@ if randomIC:
 
 
 
+
+
+### advection term ###
 #u_adv = project(as_vector([sin(adv_freqX*2*pi*y/L_y), sin(adv_freqY*2*pi*x/L_x)]), V_vec)
 #u_adv = project(as_vector([adv_scaleX*sin(adv_freqX*2*pi*y/L_y), adv_scaleY*sin(adv_freqY*2*pi*x/L_x)]), V_vec)
 u_adv = project(as_vector([adv_scaleX*sin(adv_freqX*2*pi*y/L_y),0]), V_vec)
@@ -210,7 +238,7 @@ def calcMilesOptimalFlowEnergyCase(function):
     normalisationFactor = abs(sqrt(L_x*L_y))/(norm(projection,"l2"))
     #print(normalisationFactor)
     retFunction = projection
-    retFunction.dat.data[:] = normalisationFactor*projection.dat.data[:]
+    retFunction.dat.data[:] = adv_scale*normalisationFactor*projection.dat.data[:]
     return retFunction
 def calcMilesOptimalFlowEnstrophyCase(function):
     funcFunction = project(function, V)
@@ -231,7 +259,7 @@ def calcMilesOptimalFlowEnstrophyCase(function):
     #normalisationFactor = 1/(norm((minNablaInvunctionNablaLapInvFunction)))
     #print(normalisationFactor)
     retFunction = minNablaInvunctionNablaLapInvFunction
-    retFunction.dat.data[:] = normalisationFactor*minNablaInvunctionNablaLapInvFunction.dat.data[:]
+    retFunction.dat.data[:] = adv_scale*normalisationFactor*minNablaInvunctionNablaLapInvFunction.dat.data[:]
     return retFunction
 UinMiles = 0
 GammaInMiles = 0
@@ -296,7 +324,9 @@ def calcCamillaTestFlow(function):
     
     result = Function(V_vec)
     result.dat.data[:] = firstTerm.dat.data[:]-secondTerm.dat.data[:]-thirdTerm.dat.data[:]
-    result.dat.data[:] = result.dat.data[:]/norm(result,"l2") 
+    
+    normalisationFactor = abs(sqrt(L_x*L_y))/(norm(result,"l2"))    
+    result.dat.data[:] = adv_scale*normalisationFactor * result.dat.data[:] 
     return result 
     
 def calcDivMinus1ofScalar(function):
@@ -405,7 +435,7 @@ else:
     
     testFunctionA, testFunctionB = TestFunctions(W)
     
-
+adv_scale
 #################################
 
 
@@ -417,15 +447,18 @@ else:
 
 F_nonLin = (inner((theta - theta_old)/timestep, testFunctionA)
     + 1/2*inner(dot(grad(theta),grad(theta)), testFunctionA) 
+    - inner(inner(cFunktion,theta), testFunctionA)
     )*dx
     
 F_onlyAdv = (inner((theta - theta_old)/timestep, testFunctionA)
     + inner(dot(u_adv,grad(theta)), testFunctionA)
+    - inner(inner(cFunktion,theta), testFunctionA)
     )*dx
 
 F_advLap = (inner((theta - theta_old)/timestep, testFunctionA)
     + inner(dot(u_adv,grad(theta)), testFunctionA) 
     + kappa * inner(grad(theta), grad(testFunctionA))
+    - inner(inner(cFunktion,theta), testFunctionA)
     )*dx
 
 if numberTestFunctions == 2:
@@ -433,6 +466,7 @@ if numberTestFunctions == 2:
         + inner(dot(u_adv,grad(theta)), testFunctionA) 
         + kappa*inner(theta_laplace, testFunctionA)
         - kappa*inner(grad(theta_laplace), grad(testFunctionA))
+        - inner(inner(cFunktion,theta), testFunctionA)
         + inner(theta_laplace, testFunctionB)
         + inner(grad(theta), grad(testFunctionB))
         )*dx
@@ -440,6 +474,7 @@ if numberTestFunctions == 2:
     F_advLap2 = (inner((theta - theta_old)/timestep, testFunctionA)
         + inner(dot(u_adv,grad(theta)), testFunctionA)
         - kappa*inner(grad(theta_laplace), grad(testFunctionA))
+        - inner(inner(cFunktion,theta), testFunctionA)
         + inner(theta_laplace, testFunctionB)
         + inner(grad(theta), grad(testFunctionB))
         )*dx
@@ -448,6 +483,7 @@ if numberTestFunctions == 2:
         + 1/2*inner(dot(grad(theta),grad(theta)), testFunctionA) 
         + kappa*inner(theta_laplace, testFunctionA)
         - kappa*inner(grad(theta_laplace), grad(testFunctionA))
+        - inner(inner(cFunktion,theta), testFunctionA)
         + inner(theta_laplace, testFunctionB)
         + inner(grad(theta), grad(testFunctionB))
         )*dx
@@ -550,7 +586,8 @@ timeValuesTime[t_iOutput] = T_0
 TimeFunctionTime = Function(VecSpaceTime,timeValuesTime[:],"time")
 
 L2timeValuesTheta = np.zeros(numberOfValuesInTimeFunctions)
-L2timeValuesTheta[t_iOutput] = norm(theta,"l2")
+L2normTheta = norm(theta,"l2")
+L2timeValuesTheta[t_iOutput] = L2normTheta
 L2normTimeFunctionTheta = Function(VecSpaceTime,L2timeValuesTheta[:],"||theta||")
 
 L2timeValuesGradTheta = np.zeros(numberOfValuesInTimeFunctions)
@@ -558,11 +595,12 @@ L2timeValuesGradTheta[t_iOutput] = norm(project(grad(theta),V_vec),"l2")
 L2normTimeFunctionGradTheta = Function(VecSpaceTime,L2timeValuesGradTheta[:],"||grad theta||")
 
 Hminus1timeValuesTheta = np.zeros(numberOfValuesInTimeFunctions)
-Hminus1timeValuesTheta[t_iOutput] = calcHminus1NormOfScalar(theta)
+Hminus1normTheta = calcHminus1NormOfScalar(theta)
+Hminus1timeValuesTheta[t_iOutput] = Hminus1normTheta
 Hminus1normTimeFunctionTheta = Function(VecSpaceTime,Hminus1timeValuesTheta[:],"||grad^-1 theta||")
-
+    
 Hminus1OverL2timeValuesTheta = np.zeros(numberOfValuesInTimeFunctions)
-Hminus1OverL2timeValuesTheta[t_iOutput] = Hminus1timeValuesTheta[t_iOutput]/L2timeValuesGradTheta[t_iOutput]
+Hminus1OverL2timeValuesTheta[t_iOutput] = Hminus1normTheta/L2normTheta
 Hminus1OverL2TimeFunctionTheta = Function(VecSpaceTime,Hminus1OverL2timeValuesTheta[:],"||grad^-1 theta||/||theta||")
 
 L2TimeValuesU_adv = np.zeros(numberOfValuesInTimeFunctions)
@@ -579,15 +617,20 @@ lDomTimeValues = np.zeros(numberOfValuesInTimeFunctions)
 lDomTimeValues[t_iOutput] = l_dom
 lDomTimeFunction = Function(VecSpaceTime,lDomTimeValues[:],"l_dom")
 
-lBatTimeValues = np.zeros(numberOfValuesInTimeFunctions)
-lBatTimeValues[t_iOutput] = l_bat
-lBatTimeFunction = Function(VecSpaceTime,lBatTimeValues[:],"l_bat")
+lBatMilesTimeValues = np.zeros(numberOfValuesInTimeFunctions)
+lBatMilesTimeValues[t_iOutput] = l_bat
+lBatMilesTimeFunction = Function(VecSpaceTime,lBatMilesTimeValues[:],"l_bat")
+
+lCharFilMiDoe = 2*pi*Hminus1normTheta/L2normTheta
+lCharFilMiDoeValues = np.zeros(numberOfValuesInTimeFunctions)
+lCharFilMiDoeValues[t_iOutput] = lCharFilMiDoe
+lCharFilMiDoeTimeFunction = Function(VecSpaceTime,lCharFilMiDoeValues[:],"l_charFila")
 
 lRootTimeValues = np.zeros(numberOfValuesInTimeFunctions)
 lRootTimeValues[t_iOutput] = l_root
 lRootTimeFunction = Function(VecSpaceTime,lRootTimeValues[:],"l_rootLapLap2")
 
-outfile_timeFunctions.write(TimeFunctionTime,L2normTimeFunctionTheta, L2normTimeFunctionGradTheta, Hminus1normTimeFunctionTheta, Hminus1OverL2TimeFunctionTheta, L2normTimeFunctionU_adv, lBatTimeFunction, lDomTimeFunction, lRootTimeFunction, time=t)
+outfile_timeFunctions.write(TimeFunctionTime,L2normTimeFunctionTheta, L2normTimeFunctionGradTheta, Hminus1normTimeFunctionTheta, Hminus1OverL2TimeFunctionTheta, L2normTimeFunctionU_adv, lCharFilMiDoeTimeFunction, lBatMilesTimeFunction, lDomTimeFunction, lRootTimeFunction, time=t)
 
 
 
@@ -608,6 +651,7 @@ while (t < T_end):
     t_i += 1
     t += timestep
     
+    #cFunktion.interpolate(sin(2*pi*t)*sin(2*pi*x/L_x)+cos(2*pi*t)*sin(2*pi*y/L_y))
     
     if numberTestFunctions == 1:
         theta_old.assign(theta)
@@ -630,6 +674,13 @@ while (t < T_end):
         if(t>=timeInitialUadv):
             camillaTestFlow = calcCamillaTestFlow(theta)
             u_adv.assign(camillaTestFlow)
+    elif usedFlow in ['zero']:
+        if(t>=timeInitialUadv):
+            u_adv.assign(0)
+    elif usedFlow in ['test']:
+        if(t>=timeInitialUadv):
+            u_advTest = project(as_vector([sin(adv_freqX*2*pi*y/L_y), sin(adv_freqY*2*pi*x/L_x)]), V_vec)
+            u_adv.assign(u_advTest)
     
     
     
@@ -665,8 +716,12 @@ while (t < T_end):
         lDomTimeValues[t_iOutput] = l_dom
         lDomTimeFunction = Function(VecSpaceTime,lDomTimeValues[:],"l_dom")
         
-        lBatTimeValues[t_iOutput] = l_bat
-        lBatTimeFunction = Function(VecSpaceTime,lBatTimeValues[:],"l_bat")
+        lBatMilesTimeValues[t_iOutput] = l_bat
+        lBatMilesTimeFunction = Function(VecSpaceTime,lBatMilesTimeValues[:],"l_bat")
+        
+        lCharFilMiDoe = 2*pi*Hminus1normTheta/L2normTheta
+        lCharFilMiDoeValues[t_iOutput] = lCharFilMiDoe
+        lCharFilMiDoeTimeFunction = Function(VecSpaceTime,lCharFilMiDoeValues[:],"l_charFila")
         
         lRootTimeValues[t_iOutput] = l_root
         lRootTimeFunction = Function(VecSpaceTime,lRootTimeValues[:],"l_rootLapLap2")
@@ -674,7 +729,8 @@ while (t < T_end):
 
 
 
-        outfile_timeFunctions.write(TimeFunctionTime,L2normTimeFunctionTheta, L2normTimeFunctionGradTheta, Hminus1normTimeFunctionTheta, Hminus1OverL2TimeFunctionTheta, L2normTimeFunctionU_adv, lBatTimeFunction, lDomTimeFunction, lRootTimeFunction, time=t)
+
+        outfile_timeFunctions.write(TimeFunctionTime,L2normTimeFunctionTheta, L2normTimeFunctionGradTheta, Hminus1normTimeFunctionTheta, Hminus1OverL2TimeFunctionTheta, L2normTimeFunctionU_adv, lCharFilMiDoeTimeFunction, lBatMilesTimeFunction, lDomTimeFunction, lRootTimeFunction, time=t)
         #outfile_timeFunctions.write(TimeFunctionTime,L2normTimeFunctionTheta, L2normTimeFunctionGradTheta, Hminus1normTimeFunctionTheta, L2normTimeFunctionU_adv, time=t)
         #outfile_timeFunctions.write(project(TimeFunctionTime, VecSpaceTime, name="time"),project(L2normTimeFunctionTheta, VecSpaceTime, name="theta L^2"), project(L2normTimeFunctionGradTheta, VecSpaceTime, name="grad theta L^2"), time=t)
 
