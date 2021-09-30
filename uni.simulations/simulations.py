@@ -35,11 +35,11 @@ print(time_start,"starting ...")
 ### PARAMETERS ###
 
 # interval lengths
-L = 256
+L = 128                 #128
 L_x = L
 
 # spatial steps
-nProL = 16
+nProL = 8               #8
 n_x = L_x*nProL
 
 # times
@@ -62,14 +62,16 @@ forceZeroAverage = False
 # kappa in theta_t + < u_adv, grad theta> + kappa*laplace theta + laplace^2 theta = 0
 kappa = 1
 
+print(kappa)
+
 ### initial condition ###
-ic_scale = 10
+ic_scale = 1
 ic_freq = 1
 ic_scale_x = ic_scale
 ic_freq_x = ic_freq
-randomIC = True
+randomIC = False
 # possible initial data files 20210929_162000_1024Random1Durch1000Values, 20210929_162000_4096Random1Durch1000Values
-loadInitialDataFilename = "20210929_162000_4096Random1Durch1000Values"
+loadInitialDataFilename = ""
 
 
 ### rescale outputs -> \| . \|_2 = 1 ###
@@ -80,7 +82,7 @@ inverseLaplacianEnforceAverageFreeAfter = True
 
 
 ### write output only every ... time intervals to save storage space
-writeOutputEvery = 0.2             # 0 -> every time,
+writeOutputEvery = 0.1             # 0 -> every time,
  
 ### PARAMETERS END ###
 
@@ -150,8 +152,15 @@ print(datetime.datetime.now(),"spaces defined")
 
 ### initial data ###
 x_u0 = SpatialCoordinate(mesh)
-ic_u = project(as_vector([ic_scale*sin(ic_freq_x*2*pi*x_u0[0]/L_x)]), V)
 
+def posPartofFunction(function):
+    return 1/2*(np.abs(function)+function)
+    
+ic_c = 1
+ic_u = project(as_vector([ic_scale*sin(ic_freq_x*2*pi*x_u0[0]/L_x)]), V)
+#ic_u = project(as_vector([ic_scale*posPartofFunction(x_u0[0]*sin(ic_freq_x*2*pi*x_u0[0]/L_x))]), V)
+#ic_u = project(as_vector([ np.power(np.exp(1),(-np.power(1/2*(x_u0[0]-50),2))) ]), V)
+#ic_u = project(as_vector([ic_scale*cos(ic_freq_x*2*pi*x_u0[0]/L_x)]), V)
 
 
 
@@ -577,7 +586,7 @@ while (t < T_end):
 
 
     if (time.time()-lastLogOutput)>maxLogOutputsPerSecond:
-        print(np.round(t_i/numberOfTimesteps*100,2),"% ( step = ", t_i, " von ", numberOfTimesteps,", time t = ", np.round(t,4),") after ", datetime.datetime.now()-lastRealTime, ", estimated time left ", ((T_end-T_0)/t-1)*(datetime.datetime.now()-timeStartSolving)  )
+        print(np.round(t_i/numberOfTimesteps*100,2),"% ( step = ", t_i, " of ", numberOfTimesteps,", time t = ", np.round(t,4),") after ", datetime.datetime.now()-lastRealTime, ", estimated time left ", ((T_end-T_0)/t-1)*(datetime.datetime.now()-timeStartSolving)  )
         lastLogOutput = time.time()
     lastRealTime = datetime.datetime.now()
 
