@@ -26,12 +26,6 @@ print(time_start,"starting ...")
 
 
 
-
-
-
-
-
-
 ### PARAMETERS ###
 
 # interval lengths

@@ -1,10 +1,12 @@
 import numpy
 from firedrake import *
-import vtktools                 #vtktools.py von hier https://raw.githubusercontent.com/FluidityProject/fluidity/main/python/vtktools.py in firedrake/lib/python3.6/site-packages kopieren 
+import vtk 
 import os
 import xml.etree.ElementTree as ElementTree
 import meshio
-
+from vtkmodules.vtkCommonCore import vtkDataArray
+from networkx.generators.tests.test_small import null
+from vtk.util.numpy_support import vtk_to_numpy
 ##### filestuff #####
 scriptFilePath = os.path.dirname(os.path.realpath(__file__))
 dataFolderPath = scriptFilePath+"/../data/loadData/"
@@ -17,7 +19,7 @@ ENDTIME = 2
 ## create empty array
 timeFileArrayTemp = [["",""] for y in range(len(pvdXMLTreeRoot[0]))]
 
-    
+
 i = 0
 for dataset in pvdXMLTreeRoot[0]:
     timeStep = float(dataset.get('timestep'))
@@ -26,24 +28,59 @@ for dataset in pvdXMLTreeRoot[0]:
         timeFileArrayTemp[i][1]= dataset.get('file')
         i+=1
 numberOfFiles = i
+
 timeFileArray = [["",""] for y in range(numberOfFiles)]
 timeFileArray = timeFileArrayTemp[0:numberOfFiles][:]
 
 
+print(dataFolderPath+timeFileArray[0][1])
 
 
+data = meshio.read(dataFolderPath+timeFileArray[0][1])
+L=max(data.points[:,0])
+infoString = "infostring"
+infoString += "\n\t"+"L"+" = \t\t"+str(L)
+cells=len(data.cells[0])
+points=len(data.points[:,0])
 
-mesh = meshio.read(dataFolderPath+timeFileArray[0][1])
+print("points =",points)
+infoString += "\n\t"+"points"+" = \t\t"+str(points)
+n=cells
+print("n =",n)
+infoString += "\n\t"+"n"+" = \t\t"+str(n)
+degree = round(points/cells)
+infoString += "\n\t"+"degree"+" = \t\t"+str(degree)
 
-V = FunctionSpace(mesh, "CG", 2)
-X = interpolate(SpatialCoordinate(mesh), V)
+print(infoString)
+#https://stackoverflow.com/a/54072929
 
-vtu = vtktools.vtu("output_0.vtu")
-reader = lambda X: vtu.ProbeData(numpy.c_[X, numpy.zeros(X.shape[0])], "Solution").reshape((-1,))
+# load a vtk file as input
+reader = vtk.vtkXMLUnstructuredGridReader()
+reader.SetFileName(dataFolderPath+timeFileArray[0][1])
+reader.Update()
 
-u = Function(V)
-u.dat.data[:] = reader(X.dat.data_ro)
+output = reader.GetOutput()
 
-(x, y) = SpatialCoordinate(mesh)
-w = interpolate(x + y, V)
-print("||u - w||: ", norm(u - w))
+
+#entweder index (-> 0) oder den namen in <PointData Vectors="function_8[0]">     -> function_8[0]
+
+potential = output.GetPointData().GetArray(0)
+abc = output.GetPointData().GetArray("a")
+# Get the coordinates of nodes in the mesh
+nodes_vtk_array= reader.GetOutput().GetPoints().GetData()
+
+test = vtk_to_numpy(potential)
+print(test[:,0])
+
+print(test)
+import matplotlib.pyplot as plt
+ones = np.ones(100)
+print(potential.GetNumberOfTuples())
+print(potential.GetTuple(0))
+
+
+plt.figure()
+plt.plot(test[:,0])
+plt.show()
+
+
