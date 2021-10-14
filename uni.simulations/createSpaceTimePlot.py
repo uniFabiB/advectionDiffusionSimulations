@@ -179,7 +179,9 @@ dataAx.set_xlabel("x")
 dataAx.set_ylabel("t")
 
 
-    
+
+
+
 
 print(infoString)
 copy(inputFolderPath+"info.txt", outputFolderPath+"info.txt")
