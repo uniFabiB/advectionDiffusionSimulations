@@ -21,6 +21,8 @@ from numpy import imag
 # using now() to get current time  
 time_start = datetime.datetime.now()
 print(time_start,"starting ...")  
+infoString = "simulation info"
+infoString += "\n\t"+"time_start"+" = \t\t"+str(time_start)
 
 
 
@@ -38,7 +40,7 @@ n_x = L_x*nProL
 
 # times
 numberOfTimestepsPerUnit = 200
-T_end = 1000
+T_end = 10
 timeInitialUadv = 0.001      ### for miles u_adv need a sine flow until t = 0.01 (otherwise get a stationary solution)
 
 # pde name
@@ -56,7 +58,6 @@ forceZeroAverage = False
 # kappa in theta_t + < u_adv, grad theta> + kappa*laplace theta + laplace^2 theta = 0
 kappa = 1
 
-print(kappa)
 
 ### initial condition ###
 ic_scale = 1
@@ -94,13 +95,57 @@ writeOutputEvery = 0.1             # 0 -> every time,
 
 
 
+
+
+
+
+
+
+
+
+infoString += "\n\t"+"L"+" = \t\t\t\t"+str(L)
+infoString += "\n\t"+"nProL"+" = \t\t"+str(nProL)
+infoString += "\n\t"+"numberOfTimestepsPerUnit"+" = \t\t"+str(numberOfTimestepsPerUnit)
+infoString += "\n\t"+"T_end"+" = \t\t"+str(T_end)
+infoString += "\n\t"+"timeInitialUadv"+" = \t\t"+str(timeInitialUadv)
+infoString += "\n\t"+"pdeShortName"+" = \t\t"+str(pdeShortName)
+infoString += "\n\t"+"finitEleFamily"+" = \t\t"+str(finitEleFamily)
+infoString += "\n\t"+"finitEleDegree"+" = \t\t"+str(finitEleDegree)
+infoString += "\n\t"+"forceZeroAverage"+" = \t\t"+str(forceZeroAverage)
+infoString += "\n\t"+"kappa"+" = \t\t"+str(kappa)
+infoString += "\n\t"+"ic_scale"+" = \t\t"+str(ic_scale)
+infoString += "\n\t"+"ic_freq"+" = \t\t"+str(ic_freq)
+infoString += "\n\t"+"randomIC"+" = \t\t"+str(randomIC)
+infoString += "\n\t"+"loadInitialDataFilename"+" = \t\t"+str(loadInitialDataFilename)
+infoString += "\n\t"+"rescaleOutputs"+" = \t\t"+str(rescaleOutputs)
+infoString += "\n\t"+"inverseLaplacianEnforceAverageFreeBefore"+" = \t\t"+str(inverseLaplacianEnforceAverageFreeBefore)
+infoString += "\n\t"+"inverseLaplacianEnforceAverageFreeAfter"+" = \t\t"+str(inverseLaplacianEnforceAverageFreeAfter)
+infoString += "\n\t"+"writeOutputEvery"+" = \t\t"+str(writeOutputEvery)
+
+
+
+
+
+
+
+
+
+
 ### settings ###
 maxLogOutputsPerSecond = 1
 
 
 ### files
-mashFunctionsFilePath = "/../data/temp/u.pvd"
-timeFunctionsFilePath = "/../data/temp/timeFunctions.pvd"
+output_dir_path = os.path.dirname(os.path.realpath(__file__))+"/../data/temp/"
+meshFunctionsFilePath = output_dir_path+"/simulationData/u.pvd"
+timeFunctionsFilePath = output_dir_path+"/simulationData/timeFunctions.pvd"
+outfile_u = File(meshFunctionsFilePath)
+outfile_timeFunctions = File(timeFunctionsFilePath)
+
+
+
+infoString += "\n\t"+"meshFunctionsFilePath"+" = \t\t"+str(meshFunctionsFilePath)
+infoString += "\n\t"+"timeFunctionsFilePath"+" = \t\t"+str(timeFunctionsFilePath)
 
 
 
@@ -117,12 +162,6 @@ timeFunctionsFilePath = "/../data/temp/timeFunctions.pvd"
 
 
 
-
-
-
-output_dir_path = os.path.dirname(os.path.realpath(__file__))
-outfile_u = File(output_dir_path + mashFunctionsFilePath)
-outfile_timeFunctions = File(output_dir_path + timeFunctionsFilePath)
 
 
 T_0 = 0
@@ -168,8 +207,10 @@ u_adv = Function(V)
 u_adv.assign(0)
 
 if len(loadInitialDataFilename)>0:
-    u0_loaded = np.load(output_dir_path + "/../data/initialData/" + loadInitialDataFilename +".npy")
-    print(datetime.datetime.now(),"loading initial data " ,"\t", "/data/initialData/" + loadInitialDataFilename +".npy")
+    initialDataLoadingPath = output_dir_path + "/../initialData/" + loadInitialDataFilename +".npy"
+    infoString += "\n\t"+"initialDataLoadingPath"+" = \t\t"+str(initialDataLoadingPath)
+    u0_loaded = np.load(initialDataLoadingPath)
+    print(datetime.datetime.now(),"loading initial data " ,"\t", initialDataLoadingPath)
     ic_u = Function(V,u0_loaded)
 
     
@@ -512,13 +553,29 @@ outfile_timeFunctions.write(TimeFunctionTime,L2normTimeFunctionU, L2normTimeFunc
 
 
 
-### copy script to save it ####
-copy(os.path.realpath(__file__), output_dir_path + "/../data/temp/0used_script.py")
+### copy script to save it ###
+scriptTimeStamp = str(datetime.datetime.now())
+scriptTimeStamp = scriptTimeStamp.replace(":","-")
+scriptTimeStamp = scriptTimeStamp.replace(" ","_")
+scriptCopyPath = output_dir_path + "used_script_simulation_"+scriptTimeStamp+".py"
+copy(os.path.realpath(__file__), scriptCopyPath)
+
+infoString += "\n\t"+"scriptCopyPath"+" = \t\t"+str(scriptCopyPath)
+
+
 
 ### simulating ###
 
 timeStartSolving = datetime.datetime.now()
 lastRealTime = timeStartSolving
+
+infoString += "\n"
+infoString += "\n\t"+"timeStartSolving"+" = \t\t"+str(timeStartSolving)
+infoFile = open(output_dir_path+"info.txt","a")
+infoFile.write(infoString)
+infoFile.close()
+infoString = ""
+
 lastWrittenOutput = 0
 lastLogOutput = 0
 while (t < T_end):
@@ -586,5 +643,13 @@ while (t < T_end):
 
 time_end = datetime.datetime.now()
 print("ending at ",time_end)
-print("total time ", time_end-time_start)
+totalTime = time_end-time_start
+print("total time ", totalTime)
+infoString += "\n"
+infoString += "\n\t"+"time_end"+" = \t\t"+str(time_end)
+infoString += "\n\t"+"totalTime"+" = \t\t"+str(totalTime)
+infoFile = open(output_dir_path+"info.txt","a")
+infoFile.write(infoString)
+infoFile.close()
+infoString = ""
 

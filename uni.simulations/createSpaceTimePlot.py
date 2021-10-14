@@ -7,18 +7,25 @@ from vtkmodules.vtkCommonCore import vtkDataArray
 from vtk.util.numpy_support import vtk_to_numpy
 import warnings
 import numpy as np
+import datetime
+from shutil import copy
 
 # filestuff #
 scriptFilePath = os.path.dirname(os.path.realpath(__file__))
+scriptTimeStamp = str(datetime.datetime.now())
+scriptTimeStamp = scriptTimeStamp.replace(":","-")
+scriptTimeStamp = scriptTimeStamp.replace(" ","_")
 # filestuff #
 
 
 
 
 
-##### PARAMETERS ##### 
-dataFolderPath = scriptFilePath+"/../data/loadData/"
+##### PARAMETERS #####
+inputFolderPath =  scriptFilePath+"/../data/visualizeData/input/"
+dataFolderPath = inputFolderPath+"/simulationData/"
 dataFilePath = dataFolderPath+"u.pvd"
+outputParentFolderPath = scriptFilePath + "/../data/visualizeData/output/"    #+timestamp -> kein parent mehr
 STARTTIME = -1              
 ENDTIME = -1            #-1 for all
 SHOWNORMALIZED = False
@@ -26,13 +33,20 @@ SHOWNORMALIZED = False
 
 
 
+### copy script to save it ###
+outputFolderPath = outputParentFolderPath+scriptTimeStamp+"/"
+os.mkdir(outputFolderPath)
+copy(os.path.realpath(__file__), outputFolderPath+"used_script_visualization_"+scriptTimeStamp+".py")
+### copy script to save it ###
+
+
 pvdXMLTree = ElementTree.parse(dataFilePath)
 pvdXMLTreeRoot = pvdXMLTree.getroot()
-infoString = "infostring"
+infoString = "visualization info"
 infoString += "\n\t"+"dataFilePath"+" = \t\t"+str(dataFilePath)
 
 pythonFiles = 0
-for file in os.listdir(dataFolderPath):
+for file in os.listdir(str(dataFolderPath+"../")):
     if file.endswith(".py"):
         if pythonFiles == 0:
             pythonFilesInDir = file
@@ -40,8 +54,11 @@ for file in os.listdir(dataFolderPath):
             pythonFilesInDir += "\n"+file
         pythonFiles += 1
 if pythonFiles != 1:
-    warnings.warn(str("t\t\t"+str(pythonFiles)+" pyhton files in data directory ("+dataFolderPath+") gefunden"+"\n"))
-infoString += "\n\t"+"pythonFilesInDir"+" = \t"+str(pythonFilesInDir)
+    warnings.warn(str("t\t\t"+str(pythonFiles)+" pyhton files in data directory ("+dataFolderPath+") gefunden"+"\nt\t\tnot copying any simulation script files\n"))
+else:
+    copy(str(dataFolderPath+"../"+pythonFilesInDir),outputFolderPath)
+    
+infoString += "\n\t"+"simulation script"+" = \t"+str(pythonFilesInDir)
 
 
 
@@ -131,19 +148,21 @@ x = np.linspace(Lmin, Lmax, points)
 
 
 COLORRESOLUTION = 100
+NUMBEROFCOLORTICKS = 9
 
 fig = plt.figure()
 fig.suptitle(pythonFilesInDir)
+levels = np.linspace(-LinftyDataArray,LinftyDataArray,COLORRESOLUTION+1)
 if SHOWNORMALIZED:
     dataAx = fig.add_subplot(121)
 else:
     dataAx = fig.add_subplot(111)
     
-dataContourf = dataAx.contourf(x,t,dataArray, COLORRESOLUTION, cmap='coolwarm')
+dataContourf = dataAx.contourf(x,t,dataArray, levels=levels, cmap='coolwarm')
 if SHOWNORMALIZED:
     dataNormalizedAx = fig.add_subplot(122)
-    dataNormalizedContourf = dataNormalizedAx.contourf(x,t,dataArrayNormalized, COLORRESOLUTION, cmap='coolwarm')
-    fig.colorbar(dataContourf,ax=[dataAx,dataNormalizedAx], location='right')        #werte von dataContourf, aber an beiden ([dataAx,dataNormalizedAx]) damit kein ax kleiner wird
+    dataNormalizedContourf = dataNormalizedAx.contourf(x,t,dataArrayNormalized, levels=101, cmap='coolwarm')
+    colorbar = fig.colorbar(dataContourf,ax=[dataAx,dataNormalizedAx], location='right')        #werte von dataContourf, aber an beiden ([dataAx,dataNormalizedAx]) damit kein ax kleiner wird
     
     dataNormalizedAx.set_title("normalized")    
     dataNormalizedAx.set_xlabel("x")
@@ -152,8 +171,9 @@ if SHOWNORMALIZED:
     dataNormalizedAx.yaxis.tick_right()
 
 else:
-    fig.colorbar(dataContourf,ax=[dataAx], location='right')        #werte von dataContourf, aber an beiden ([dataAx,dataNormalizedAx]) damit kein ax kleiner wird
-    
+    colorbar = fig.colorbar(dataContourf,ax=[dataAx], location='right')        #werte von dataContourf, aber an beiden ([dataAx,dataNormalizedAx]) damit kein ax kleiner wird
+ticksLinSpace = np.linspace(-LinftyDataArray,LinftyDataArray,NUMBEROFCOLORTICKS)
+colorbar.set_ticks(ticksLinSpace)
 dataAx.set_title(functionName)
 dataAx.set_xlabel("x")
 dataAx.set_ylabel("t")
@@ -162,6 +182,11 @@ dataAx.set_ylabel("t")
     
 
 print(infoString)
+copy(inputFolderPath+"info.txt", outputFolderPath+"info.txt")
+infoFile = open(outputFolderPath+"info.txt","a")
+infoFile.write("\n\n")
+infoFile.write(infoString)
+infoFile.close()
 
 plt.show()
 
