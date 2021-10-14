@@ -5,7 +5,6 @@ import os
 import xml.etree.ElementTree as ElementTree
 import meshio
 from vtkmodules.vtkCommonCore import vtkDataArray
-from networkx.generators.tests.test_small import null
 from vtk.util.numpy_support import vtk_to_numpy
 ##### filestuff #####
 scriptFilePath = os.path.dirname(os.path.realpath(__file__))
