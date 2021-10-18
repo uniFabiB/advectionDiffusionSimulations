@@ -32,7 +32,7 @@ dataFolderPath = inputFolderPath+"simulationData/"
 dataFilePath = dataFolderPath+"u.pvd"
 outputParentFolderPath = scriptFilePath + "/../data/visualizeData/output/"    #+timestamp -> kein parent mehr
 STARTTIME = -1              
-ENDTIME = 1            #-1 for all
+ENDTIME = -1            #-1 for all
 SHOWNORMALIZED = True
 ##### PARAMETERS ##### 
 
