@@ -40,7 +40,7 @@ n_x = L_x*nProL
 
 # times
 numberOfTimestepsPerUnit = 200
-T_end = 10
+T_end = 10000
 timeInitialUadv = 0.001      ### for miles u_adv need a sine flow until t = 0.01 (otherwise get a stationary solution)
 
 # pde name
@@ -56,7 +56,7 @@ finitEleDegree = 1
 forceZeroAverage = False
 
 # kappa in theta_t + < u_adv, grad theta> + kappa*laplace theta + laplace^2 theta = 0
-kappa = 1
+kappa = 1/128
 
 
 ### initial condition ###
@@ -66,7 +66,7 @@ ic_scale_x = ic_scale
 ic_freq_x = ic_freq
 randomIC = False
 # possible initial data files 20210929_162000_1024Random1Durch1000Values, 20210929_162000_4096Random1Durch1000Values
-loadInitialDataFilename = ""
+loadInitialDataFilename = "20210929_162000_1024Random1Durch1000Values"
 
 
 ### rescale outputs -> \| . \|_2 = 1 ###
@@ -78,6 +78,8 @@ inverseLaplacianEnforceAverageFreeAfter = True
 
 ### write output only every ... time intervals to save storage space
 writeOutputEvery = 0.1             # 0 -> every time,
+
+writeTimeFunctionsOnlyAtTheEnd = True           # write output of time functions only at the end to save disk space
  
 ### PARAMETERS END ###
 
@@ -137,8 +139,8 @@ maxLogOutputsPerSecond = 1
 
 ### files
 output_dir_path = os.path.dirname(os.path.realpath(__file__))+"/../data/temp/"
-meshFunctionsFilePath = output_dir_path+"/simulationData/u.pvd"
-timeFunctionsFilePath = output_dir_path+"/simulationData/timeFunctions.pvd"
+meshFunctionsFilePath = output_dir_path+"simulationData/u.pvd"
+timeFunctionsFilePath = output_dir_path+"simulationData/timeFunctions.pvd"
 outfile_u = File(meshFunctionsFilePath)
 outfile_timeFunctions = File(timeFunctionsFilePath)
 
@@ -176,7 +178,7 @@ mesh = PeriodicIntervalMesh(n_x,L_x)
 
 V = VectorFunctionSpace(mesh, finitEleFamily, finitEleDegree)
 V_vec = VectorFunctionSpace(mesh, finitEleFamily, finitEleDegree)
-V_out = VectorFunctionSpace(mesh, finitEleFamily, finitEleDegree)
+V_out = VectorFunctionSpace(mesh, "DG", 0)
 x = SpatialCoordinate(mesh)
 
 
@@ -207,7 +209,7 @@ u_adv = Function(V)
 u_adv.assign(0)
 
 if len(loadInitialDataFilename)>0:
-    initialDataLoadingPath = output_dir_path + "/../initialData/" + loadInitialDataFilename +".npy"
+    initialDataLoadingPath = output_dir_path + "../initialData/" + loadInitialDataFilename +".npy"
     infoString += "\n\t"+"initialDataLoadingPath"+" = \t\t"+str(initialDataLoadingPath)
     u0_loaded = np.load(initialDataLoadingPath)
     print(datetime.datetime.now(),"loading initial data " ,"\t", initialDataLoadingPath)
@@ -293,8 +295,7 @@ def getOutputMeshFunctionScalar(function, name, value = None, component = -1):
             retFunction /= norm(thisFunction,"l2")
     return retFunction
 def writeOutputMeshFunctions():    
-    outU = Function(V_out, u, "u")
-    outfile_u.write(u, time=t)
+    outfile_u.write(project(u, V_out,name="u"), time=t)
 
 
 
@@ -544,8 +545,8 @@ L2TimeValuesU_adv = np.zeros(numberOfValuesInTimeFunctions)
 L2TimeValuesU_adv[t_iOutput] = norm(u_adv,"l2")
 L2normTimeFunctionU_adv = Function(VecSpaceTime,L2TimeValuesU_adv[:],"||u_adv||")
 
-
-outfile_timeFunctions.write(TimeFunctionTime,L2normTimeFunctionU, L2normTimeFunctionGradU, Hminus1normTimeFunctionU, Hminus1OverL2TimeFunctionU, L2normTimeFunctionU_adv, time=t)
+if not writeTimeFunctionsOnlyAtTheEnd:
+    outfile_timeFunctions.write(TimeFunctionTime,L2normTimeFunctionU, L2normTimeFunctionGradU, Hminus1normTimeFunctionU, Hminus1OverL2TimeFunctionU, L2normTimeFunctionU_adv, time=t)
 
 
 
@@ -623,8 +624,8 @@ while (t < T_end):
         L2TimeValuesU_adv[t_iOutput] = norm(u_adv,"l2")
         L2normTimeFunctionU_adv = Function(VecSpaceTime,L2TimeValuesU_adv[:],"||u_adv||")
         
-
-        outfile_timeFunctions.write(TimeFunctionTime,L2normTimeFunctionU, L2normTimeFunctionGradU, Hminus1normTimeFunctionU, Hminus1OverL2TimeFunctionU, L2normTimeFunctionU_adv, time=t)
+        if not writeTimeFunctionsOnlyAtTheEnd:
+            outfile_timeFunctions.write(TimeFunctionTime,L2normTimeFunctionU, L2normTimeFunctionGradU, Hminus1normTimeFunctionU, Hminus1OverL2TimeFunctionU, L2normTimeFunctionU_adv, time=t)
 
     
         ### write output mesh functions ###   
@@ -640,7 +641,10 @@ while (t < T_end):
         print(np.round(t_i/numberOfTimesteps*100,2),"% ( step = ", t_i, " of ", numberOfTimesteps,", time t = ", np.round(t,4),") after ", datetime.datetime.now()-lastRealTime, ", estimated time left ", ((T_end-T_0)/t-1)*(datetime.datetime.now()-timeStartSolving)  )
         lastLogOutput = time.time()
     lastRealTime = datetime.datetime.now()
-
+    
+if writeTimeFunctionsOnlyAtTheEnd:
+    outfile_timeFunctions.write(TimeFunctionTime,L2normTimeFunctionU, L2normTimeFunctionGradU, Hminus1normTimeFunctionU, Hminus1OverL2TimeFunctionU, L2normTimeFunctionU_adv, time=t)
+    
 time_end = datetime.datetime.now()
 print("ending at ",time_end)
 totalTime = time_end-time_start

@@ -26,14 +26,14 @@ scriptTimeStamp = scriptTimeStamp.replace(" ","_")
 
 
 ##### PARAMETERS #####
-TITLE = "kappa = 1 (pure Kuramoto-Sivashinsky)"
+TITLE = ""
 inputFolderPath =  scriptFilePath+"/../data/visualizeData/input/"
 dataFolderPath = inputFolderPath+"simulationData/"
 dataFilePath = dataFolderPath+"u.pvd"
 outputParentFolderPath = scriptFilePath + "/../data/visualizeData/output/"    #+timestamp -> kein parent mehr
 STARTTIME = -1              
 ENDTIME = -1            #-1 for all
-SHOWNORMALIZED = True
+SHOWNORMALIZED = False
 ##### PARAMETERS ##### 
 
 
