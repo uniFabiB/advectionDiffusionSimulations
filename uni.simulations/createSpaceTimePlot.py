@@ -26,19 +26,22 @@ scriptTimeStamp = scriptTimeStamp.replace(" ","_")
 
 
 ##### PARAMETERS #####
+TITLE = "kappa = 1 (pure Kuramoto-Sivashinsky)"
 inputFolderPath =  scriptFilePath+"/../data/visualizeData/input/"
 dataFolderPath = inputFolderPath+"simulationData/"
 dataFilePath = dataFolderPath+"u.pvd"
 outputParentFolderPath = scriptFilePath + "/../data/visualizeData/output/"    #+timestamp -> kein parent mehr
 STARTTIME = -1              
-ENDTIME = -1            #-1 for all
+ENDTIME = 1            #-1 for all
 SHOWNORMALIZED = True
 ##### PARAMETERS ##### 
 
 
 
 ### copy script to save it ###
-outputFolderPath = outputParentFolderPath+scriptTimeStamp+"/"
+titleNameReplacedCharacters = TITLE.replace(" ","_")
+titleNameReplacedCharacters = titleNameReplacedCharacters.replace("/",":")
+outputFolderPath = outputParentFolderPath+titleNameReplacedCharacters+"_"+scriptTimeStamp+"/"
 os.mkdir(outputFolderPath)
 usedVisualizationScriptName = "used_script_visualization_"+scriptTimeStamp+".py"
 copy(os.path.realpath(__file__), outputFolderPath+usedVisualizationScriptName)
@@ -100,7 +103,7 @@ timeFileArray = timeFileArrayTemp[0:numberOfFiles][:]
 
 
 ### read first vtu file to get mesh data 
-print(datetime.datetime.now(),"reading first file for mesh data") 
+print(datetime.datetime.now(),"loading first file for mesh data") 
 data = meshio.read(dataFolderPath+timeFileArray[0][1])
 Lmin=min(data.points[:,0])
 Lmax=max(data.points[:,0])
@@ -179,8 +182,12 @@ NUMBEROFCOLORTICKS = 9
 
 print(datetime.datetime.now(),"creating plot") 
 fig = plt.figure()
-fig.set_size_inches(16, 9)
-#plt.suptitle(pythonFileName)
+if SHOWNORMALIZED:
+    fig.set_size_inches(16, 9)
+else:
+    fig.set_size_inches(10, 9)
+    
+plt.suptitle(TITLE)
 levels = np.linspace(-LinftyDataArray,LinftyDataArray,COLORRESOLUTION+1)
 if SHOWNORMALIZED:
     dataAx = fig.add_subplot(121)
@@ -232,5 +239,8 @@ print(datetime.datetime.now(),"plotting")
 plt.savefig(outputFolderPath+"plot.png", dpi = 128, bbox_inches='tight')
 print(datetime.datetime.now(),"exported")
 #plt.show()
+
+
+print(datetime.datetime.now(),"finished")
 
 
