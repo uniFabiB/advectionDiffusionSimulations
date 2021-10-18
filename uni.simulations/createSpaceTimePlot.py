@@ -9,13 +9,14 @@ import warnings
 import numpy as np
 import datetime
 from shutil import copy
+import matplotlib.pyplot as plt
 
-# filestuff #
+# file stuff #
 scriptFilePath = os.path.dirname(os.path.realpath(__file__))
 scriptTimeStamp = str(datetime.datetime.now())
 scriptTimeStamp = scriptTimeStamp.replace(":","-")
 scriptTimeStamp = scriptTimeStamp.replace(" ","_")
-# filestuff #
+# file stuff #
 
 
 
@@ -40,6 +41,7 @@ copy(os.path.realpath(__file__), outputFolderPath+"used_script_visualization_"+s
 ### copy script to save it ###
 
 
+### open pvd to get vtu data files
 pvdXMLTree = ElementTree.parse(dataFilePath)
 pvdXMLTreeRoot = pvdXMLTree.getroot()
 infoString = "visualization info"
@@ -63,10 +65,10 @@ infoString += "\n\t"+"simulation script"+" = \t"+str(pythonFilesInDir)
 
 
 
-## create empty array
+# create empty array
 timeFileArrayTemp = [["",""] for y in range(len(pvdXMLTreeRoot[0]))]
 
-
+# load data file names
 i = 0
 for dataset in pvdXMLTreeRoot[0]:
     timeStep = float(dataset.get('timestep'))
@@ -79,11 +81,12 @@ numberOfFiles = i
 timeFileArray = [["",""] for y in range(numberOfFiles)]
 timeFileArray = timeFileArrayTemp[0:numberOfFiles][:]
 
+
+### read first vtu file to get mesh data 
 data = meshio.read(dataFolderPath+timeFileArray[0][1])
 Lmin=min(data.points[:,0])
 Lmax=max(data.points[:,0])
 L=Lmax-Lmin
-#print(data)
 infoString += "\n\t"+"L"+" = \t\t\t"+str(L)
 cells=len(data.cells[0])
 points=len(data.points[:,0])
@@ -94,9 +97,8 @@ infoString += "\n\t"+"n"+" = \t\t\t"+str(n)
 degree = round(points/cells)
 infoString += "\n\t"+"degree"+" = \t\t"+str(degree)
 
-#https://stackoverflow.com/a/54072929
 
-# load a vtk file as input
+# lock up all data file names
 reader = vtk.vtkXMLUnstructuredGridReader()
 filesNotFound = 0
 filesFound = 0
@@ -113,7 +115,7 @@ if filesNotFound>0:
     print("\n")
     
     
-    
+# load all data files
 dataArray = np.empty([filesFound, points])
 t = np.empty(filesFound)
 for i in range(filesFound):
@@ -121,14 +123,15 @@ for i in range(filesFound):
     reader.Update()
     readerOutput = reader.GetOutput()
     vtkArray = readerOutput.GetPointData().GetArray(0)
+        #https://stackoverflow.com/a/54072929
+        #entweder index (-> 0) oder den namen in <PointData Vectors="function_8[0]">     -> function_8[0]
     multiComponentArray = vtk_to_numpy(vtkArray)
     dataArray[i,:] = multiComponentArray[:,0]
-    #dataArray[i,:] = np.random.rand(points)            just to test if the values match
     t[i] = timeFileArray[listOfFilesFound[i]][0]
 functionName = vtkArray.GetName()
 infoString += "\n\t"+"functionName"+" = \t\t"+str(functionName)
 
-
+# create normalized data array
 dataArrayNormalized = numpy.copy(dataArray)
 LinftyDataArray = 0
 for i in range(filesFound):
@@ -136,12 +139,11 @@ for i in range(filesFound):
      LinftyDataArray = max(abs(dataArrayNormalized[i,:]))
 infoString += "\n\t"+"LinftyDataArray"+" = \t"+str(LinftyDataArray)
 
-
 for i in range(filesFound):
     dataArrayNormalized[i,:] = LinftyDataArray/max(abs(dataArrayNormalized[i,:]))*np.copy(dataArrayNormalized[i,:])
 
-#entweder index (-> 0) oder den namen in <PointData Vectors="function_8[0]">     -> function_8[0]
-import matplotlib.pyplot as plt
+
+### plotting ###
 
 # generate 2 2d grids for the x & y bounds
 x = np.linspace(Lmin, Lmax, points)
@@ -181,7 +183,7 @@ dataAx.set_ylabel("t")
 
 
 
-
+### write info to file
 
 print(infoString)
 copy(inputFolderPath+"info.txt", outputFolderPath+"info.txt")
@@ -190,15 +192,8 @@ infoFile.write("\n\n")
 infoFile.write(infoString)
 infoFile.close()
 
+### show plot
 plt.show()
-
-
-#fig, axes = pl.subplots(1, 3, figsize=(15, 4))
-#c1 = axes[0].contourf(x, t, dataArray)
-
-#plt.colorbar(c1, ax=axes[0])
-#plt.imshow(x,t,dataArray, cmap='RdBu', aspect='auto')
-#plt.show()
 
 
 
