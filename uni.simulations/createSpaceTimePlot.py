@@ -10,7 +10,10 @@ import numpy as np
 import datetime
 from shutil import copy
 import matplotlib.pyplot as plt
+from meshio import _files
 
+scriptStartTime = datetime.datetime.now()
+print(scriptStartTime,"starting ...")  
 # file stuff #
 scriptFilePath = os.path.dirname(os.path.realpath(__file__))
 scriptTimeStamp = str(datetime.datetime.now())
@@ -24,12 +27,12 @@ scriptTimeStamp = scriptTimeStamp.replace(" ","_")
 
 ##### PARAMETERS #####
 inputFolderPath =  scriptFilePath+"/../data/visualizeData/input/"
-dataFolderPath = inputFolderPath+"/simulationData/"
+dataFolderPath = inputFolderPath+"simulationData/"
 dataFilePath = dataFolderPath+"u.pvd"
 outputParentFolderPath = scriptFilePath + "/../data/visualizeData/output/"    #+timestamp -> kein parent mehr
 STARTTIME = -1              
 ENDTIME = -1            #-1 for all
-SHOWNORMALIZED = False
+SHOWNORMALIZED = True
 ##### PARAMETERS ##### 
 
 
@@ -37,7 +40,8 @@ SHOWNORMALIZED = False
 ### copy script to save it ###
 outputFolderPath = outputParentFolderPath+scriptTimeStamp+"/"
 os.mkdir(outputFolderPath)
-copy(os.path.realpath(__file__), outputFolderPath+"used_script_visualization_"+scriptTimeStamp+".py")
+usedVisualizationScriptName = "used_script_visualization_"+scriptTimeStamp+".py"
+copy(os.path.realpath(__file__), outputFolderPath+usedVisualizationScriptName)
 ### copy script to save it ###
 
 
@@ -45,22 +49,26 @@ copy(os.path.realpath(__file__), outputFolderPath+"used_script_visualization_"+s
 pvdXMLTree = ElementTree.parse(dataFilePath)
 pvdXMLTreeRoot = pvdXMLTree.getroot()
 infoString = "visualization info"
-infoString += "\n\t"+"dataFilePath"+" = \t\t"+str(dataFilePath)
+infoString += "\n\t"+"dataFilePath"+" = \t\t\t"+str(dataFilePath)
 
 pythonFiles = 0
-for file in os.listdir(str(dataFolderPath+"../")):
-    if file.endswith(".py"):
-        if pythonFiles == 0:
-            pythonFilesInDir = file
-        else:
-            pythonFilesInDir += "\n"+file
-        pythonFiles += 1
+searchPaths = [dataFolderPath+"../",dataFolderPath]
+pythonFileName = ""
+for searchPath in searchPaths:
+    for file in os.listdir(searchPath):
+        if file.endswith(".py"):
+            pythonFileName += file
+            if pythonFiles == 0:
+                pythonFilesInDirPaths = searchPath+file
+            else:
+                pythonFilesInDirPaths += "\n"+searchPath+file
+            pythonFiles += 1
 if pythonFiles != 1:
-    warnings.warn(str("t\t\t"+str(pythonFiles)+" pyhton files in data directory ("+dataFolderPath+") gefunden"+"\nt\t\tnot copying any simulation script files\n"))
+    warnings.warn(str("\t\t\t"+str(pythonFiles)+" pyhton files in data directory ("+str(dataFolderPath+"/..")+" and "+dataFolderPath+") gefunden"+"\nt\t\tnot copying any simulation script files\n"))
 else:
-    copy(str(dataFolderPath+"../"+pythonFilesInDir),outputFolderPath)
+    copy(pythonFilesInDirPaths,outputFolderPath)
     
-infoString += "\n\t"+"simulation script"+" = \t"+str(pythonFilesInDir)
+infoString += "\n\t"+"simulation script"+" = \t\t"+str(pythonFilesInDirPaths)
 
 
 
@@ -68,14 +76,23 @@ infoString += "\n\t"+"simulation script"+" = \t"+str(pythonFilesInDir)
 # create empty array
 timeFileArrayTemp = [["",""] for y in range(len(pvdXMLTreeRoot[0]))]
 
+print(datetime.datetime.now(),"loading data file names")  
 # load data file names
 i = 0
+logEveryXtimes = 1000
+filesSinceLog = 0
+logEveryXpercent = 10
+nextLogPercentage = logEveryXpercent
 for dataset in pvdXMLTreeRoot[0]:
     timeStep = float(dataset.get('timestep'))
     if timeStep>=STARTTIME and (timeStep<=ENDTIME or ENDTIME <0):
         timeFileArrayTemp[i][0]= timeStep
         timeFileArrayTemp[i][1]= dataset.get('file')
         i+=1
+    if i/len(pvdXMLTreeRoot[0]) > nextLogPercentage/100:
+#        print(datetime.datetime.now(),"loaded "+str(round(i/len(pvdXMLTreeRoot[0])*100))+"% of data file names")
+        nextLogPercentage += logEveryXpercent
+print(datetime.datetime.now(),"loaded 100% of data file names")
 numberOfFiles = i
 
 timeFileArray = [["",""] for y in range(numberOfFiles)]
@@ -83,19 +100,18 @@ timeFileArray = timeFileArrayTemp[0:numberOfFiles][:]
 
 
 ### read first vtu file to get mesh data 
+print(datetime.datetime.now(),"reading first file for mesh data") 
 data = meshio.read(dataFolderPath+timeFileArray[0][1])
 Lmin=min(data.points[:,0])
 Lmax=max(data.points[:,0])
 L=Lmax-Lmin
-infoString += "\n\t"+"L"+" = \t\t\t"+str(L)
+infoString += "\n\t"+"L"+" = \t\t\t\t"+str(L)
 cells=len(data.cells[0])
 points=len(data.points[:,0])
 
-infoString += "\n\t"+"points"+" = \t\t"+str(points)
+infoString += "\n\t"+"points"+" = \t\t\t"+str(points)
 n=cells
-infoString += "\n\t"+"n"+" = \t\t\t"+str(n)
-degree = round(points/cells)
-infoString += "\n\t"+"degree"+" = \t\t"+str(degree)
+infoString += "\n\t"+"n"+" = \t\t\t\t"+str(n)
 
 
 # lock up all data file names
@@ -116,8 +132,11 @@ if filesNotFound>0:
     
     
 # load all data files
+print(datetime.datetime.now(),"loading data files") 
 dataArray = np.empty([filesFound, points])
 t = np.empty(filesFound)
+logEveryXpercent = 10
+nextLogPercentage = logEveryXpercent
 for i in range(filesFound):
     reader.SetFileName(dataFolderPath+timeFileArray[listOfFilesFound[i]][1])
     reader.Update()
@@ -128,16 +147,22 @@ for i in range(filesFound):
     multiComponentArray = vtk_to_numpy(vtkArray)
     dataArray[i,:] = multiComponentArray[:,0]
     t[i] = timeFileArray[listOfFilesFound[i]][0]
+    if i/filesFound > nextLogPercentage/100:
+        print(datetime.datetime.now(),"loaded "+str(round(i/filesFound*100))+"% of data files")
+        nextLogPercentage += logEveryXpercent
+print(datetime.datetime.now(),"loaded 100% of data files")
+        
 functionName = vtkArray.GetName()
-infoString += "\n\t"+"functionName"+" = \t\t"+str(functionName)
+infoString += "\n\t"+"functionName"+" = \t\t\t"+str(functionName)
 
+print(datetime.datetime.now(),"creating normalized array") 
 # create normalized data array
 dataArrayNormalized = numpy.copy(dataArray)
 LinftyDataArray = 0
 for i in range(filesFound):
- if max(abs(dataArrayNormalized[i,:]))> LinftyDataArray:
-     LinftyDataArray = max(abs(dataArrayNormalized[i,:]))
-infoString += "\n\t"+"LinftyDataArray"+" = \t"+str(LinftyDataArray)
+    if max(abs(dataArrayNormalized[i,:]))> LinftyDataArray:
+        LinftyDataArray = max(abs(dataArrayNormalized[i,:]))
+infoString += "\n\t"+"LinftyDataArray"+" = \t\t"+str(LinftyDataArray)
 
 for i in range(filesFound):
     dataArrayNormalized[i,:] = LinftyDataArray/max(abs(dataArrayNormalized[i,:]))*np.copy(dataArrayNormalized[i,:])
@@ -152,8 +177,10 @@ x = np.linspace(Lmin, Lmax, points)
 COLORRESOLUTION = 100
 NUMBEROFCOLORTICKS = 9
 
+print(datetime.datetime.now(),"creating plot") 
 fig = plt.figure()
-fig.suptitle(pythonFilesInDir)
+fig.set_size_inches(16, 9)
+#plt.suptitle(pythonFileName)
 levels = np.linspace(-LinftyDataArray,LinftyDataArray,COLORRESOLUTION+1)
 if SHOWNORMALIZED:
     dataAx = fig.add_subplot(121)
@@ -180,20 +207,30 @@ dataAx.set_title(functionName)
 dataAx.set_xlabel("x")
 dataAx.set_ylabel("t")
 
+fig.text(0.1, 0,"simulation script    " + pythonFileName + "\n"+"visualization script " +usedVisualizationScriptName, size=10, ha='left', va='bottom')
+
 
 
 
 ### write info to file
 
 print(infoString)
-copy(inputFolderPath+"info.txt", outputFolderPath+"info.txt")
+originalInfoFilePath = inputFolderPath+"info.txt"
+if os.path.isfile(originalInfoFilePath):
+    copy(originalInfoFilePath, outputFolderPath+"info.txt")
 infoFile = open(outputFolderPath+"info.txt","a")
+scriptEndTime = datetime.datetime.now()
+scriptTime = scriptEndTime-scriptStartTime
+print(scriptEndTime,"finishing after "+str(scriptTime))  
+infoString += "\n\t"+"total visualization time"+" = \t"+str(scriptTime)
 infoFile.write("\n\n")
 infoFile.write(infoString)
 infoFile.close()
 
-### show plot
-plt.show()
-
+### show/export plot
+print(datetime.datetime.now(),"plotting")
+plt.savefig(outputFolderPath+"plot.png", dpi = 128, bbox_inches='tight')
+print(datetime.datetime.now(),"exported")
+#plt.show()
 
 
