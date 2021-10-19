@@ -26,13 +26,13 @@ scriptTimeStamp = scriptTimeStamp.replace(" ","_")
 
 
 ##### PARAMETERS #####
-TITLE = ""
+TITLE = "kappa = 100/143"
 inputFolderPath =  scriptFilePath+"/../data/visualizeData/input/"
 dataFolderPath = inputFolderPath+"simulationData/"
 dataFilePath = dataFolderPath+"u.pvd"
 outputParentFolderPath = scriptFilePath + "/../data/visualizeData/output/"    #+timestamp -> kein parent mehr
 STARTTIME = -1              
-ENDTIME = -1            #-1 for all
+ENDTIME = 1000           #-1 for all
 SHOWNORMALIZED = False
 ##### PARAMETERS ##### 
 
@@ -67,7 +67,7 @@ for searchPath in searchPaths:
                 pythonFilesInDirPaths += "\n"+searchPath+file
             pythonFiles += 1
 if pythonFiles != 1:
-    warnings.warn(str("\t\t\t"+str(pythonFiles)+" pyhton files in data directory ("+str(dataFolderPath+"/..")+" and "+dataFolderPath+") gefunden"+"\nt\t\tnot copying any simulation script files\n"))
+    raise Exception(str("\t\t\t"+str(pythonFiles)+" pyhton files in data directory ("+str(dataFolderPath+"/..")+" and "+dataFolderPath+") gefunden"+"\nt\t\tnot copying any simulation script files\n"))
 else:
     copy(pythonFilesInDirPaths,outputFolderPath)
     

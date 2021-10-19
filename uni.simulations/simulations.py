@@ -1,7 +1,7 @@
-from firedrake import *
 import numpy as np
 import os
-
+os.environ["OMP_NUM_THREADS"] = "1" # export OMP_NUM_THREADS=4
+from firedrake import *
 ### time ###
 import time
 import datetime
@@ -15,6 +15,7 @@ from cmath import sqrt
 from firedrake.utility_meshes import PeriodicIntervalMesh
 from ufl.differentiation import NablaGrad
 from numpy import imag
+
 
 
 
@@ -40,7 +41,7 @@ n_x = L_x*nProL
 
 # times
 numberOfTimestepsPerUnit = 200
-T_end = 10000
+T_end = 1000
 timeInitialUadv = 0.001      ### for miles u_adv need a sine flow until t = 0.01 (otherwise get a stationary solution)
 
 # pde name
@@ -56,7 +57,7 @@ finitEleDegree = 1
 forceZeroAverage = False
 
 # kappa in theta_t + < u_adv, grad theta> + kappa*laplace theta + laplace^2 theta = 0
-kappa = 1/128
+kappa = 100/143
 
 
 ### initial condition ###
@@ -77,7 +78,7 @@ inverseLaplacianEnforceAverageFreeAfter = True
 
 
 ### write output only every ... time intervals to save storage space
-writeOutputEvery = 0.1             # 0 -> every time,
+writeOutputEvery = 1             # 0 -> every time,
 
 writeTimeFunctionsOnlyAtTheEnd = True           # write output of time functions only at the end to save disk space
  
@@ -141,6 +142,10 @@ maxLogOutputsPerSecond = 1
 output_dir_path = os.path.dirname(os.path.realpath(__file__))+"/../data/temp/"
 meshFunctionsFilePath = output_dir_path+"simulationData/u.pvd"
 timeFunctionsFilePath = output_dir_path+"simulationData/timeFunctions.pvd"
+infoFilePath = output_dir_path+"info.txt"
+# check if cleaned up output folder
+if os.path.isfile(infoFilePath):
+    raise Exception(infoFilePath + ' found - probably not cleaned up the output directory ('+output_dir_path+')' )
 outfile_u = File(meshFunctionsFilePath)
 outfile_timeFunctions = File(timeFunctionsFilePath)
 
