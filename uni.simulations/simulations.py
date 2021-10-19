@@ -1,6 +1,6 @@
 import numpy as np
 import os
-os.environ["OMP_NUM_THREADS"] = "1" # export OMP_NUM_THREADS=4
+os.environ["OMP_NUM_THREADS"] = "1"             # had a warning that it might run best on 1 thread
 from firedrake import *
 ### time ###
 import time
