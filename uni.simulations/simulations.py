@@ -41,7 +41,7 @@ n_x = L_x*nProL
 
 # times
 numberOfTimestepsPerUnit = 200
-T_end = 1000
+T_end = 20000
 timeInitialUadv = 0.001      ### for miles u_adv need a sine flow until t = 0.01 (otherwise get a stationary solution)
 
 # pde name
@@ -57,7 +57,7 @@ finitEleDegree = 1
 forceZeroAverage = False
 
 # kappa in theta_t + < u_adv, grad theta> + kappa*laplace theta + laplace^2 theta = 0
-kappa = 100/143
+kappa = 1/100
 
 
 ### initial condition ###
