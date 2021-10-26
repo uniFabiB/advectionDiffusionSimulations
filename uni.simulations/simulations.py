@@ -32,16 +32,16 @@ infoString += "\n\t"+"time_start"+" = \t\t"+str(time_start)
 ### PARAMETERS ###
 
 # interval lengths
-L = 128                 #128
+L = 16                 #128
 L_x = L
 
 # spatial steps
-nProL = 8               #8
+nProL = 64               #8
 n_x = L_x*nProL
 
 # times
 numberOfTimestepsPerUnit = 200
-T_end = 20000
+T_end = 10000
 timeInitialUadv = 0.001      ### for miles u_adv need a sine flow until t = 0.01 (otherwise get a stationary solution)
 
 # pde name
@@ -56,18 +56,22 @@ finitEleDegree = 1
 # force 0 average after every step? True, False12
 forceZeroAverage = False
 
-# kappa in theta_t + < u_adv, grad theta> + kappa*laplace theta + laplace^2 theta = 0
+# kappa
+#in theta_t + < u_adv, grad theta> + kappa*laplace theta + laplace^2 theta = 0
 kappa = 1/100
+epsilonKdVKuraSiva = np.sqrt(1-np.power(kappa,2))
+#epsilonKdVKuraSiva = 0
 
 
 ### initial condition ###
 ic_scale = 1
 ic_freq = 1
+ic_freqShift = 0
 ic_scale_x = ic_scale
 ic_freq_x = ic_freq
 randomIC = False
-# possible initial data files 20210929_162000_1024Random1Durch1000Values, 20210929_162000_4096Random1Durch1000Values
-loadInitialDataFilename = "20210929_162000_1024Random1Durch1000Values"
+# possible initial data files 20210929_162000_1024Random1Durch1000Values, 20210929_162000_4096Random1Durch1000Values, 20211026_140000_1024Random1Durch1Values, 20211026_140000_4096Random1Durch1Values 
+loadInitialDataFilename = "20211026_140000_1024Random1Durch1Values"
 
 
 ### rescale outputs -> \| . \|_2 = 1 ###
@@ -116,6 +120,7 @@ infoString += "\n\t"+"finitEleFamily"+" = \t\t"+str(finitEleFamily)
 infoString += "\n\t"+"finitEleDegree"+" = \t\t"+str(finitEleDegree)
 infoString += "\n\t"+"forceZeroAverage"+" = \t\t"+str(forceZeroAverage)
 infoString += "\n\t"+"kappa"+" = \t\t"+str(kappa)
+infoString += "\n\t"+"epsilonKdVKuraSiva"+" = \t\t"+str(epsilonKdVKuraSiva)
 infoString += "\n\t"+"ic_scale"+" = \t\t"+str(ic_scale)
 infoString += "\n\t"+"ic_freq"+" = \t\t"+str(ic_freq)
 infoString += "\n\t"+"randomIC"+" = \t\t"+str(randomIC)
@@ -145,7 +150,8 @@ timeFunctionsFilePath = output_dir_path+"simulationData/timeFunctions.pvd"
 infoFilePath = output_dir_path+"info.txt"
 # check if cleaned up output folder
 if os.path.isfile(infoFilePath):
-    raise Exception(infoFilePath + ' found - probably not cleaned up the output directory ('+output_dir_path+')' )
+    print(output_dir_path)
+    raise Exception(infoFilePath + ' found - probably not cleaned up the output directory:\n\txdg-open '+output_dir_path)
 outfile_u = File(meshFunctionsFilePath)
 outfile_timeFunctions = File(timeFunctionsFilePath)
 
@@ -197,7 +203,7 @@ def posPartofFunction(function):
     return 1/2*(np.abs(function)+function)
     
 ic_c = 1
-ic_u = project(as_vector([ic_scale*sin(ic_freq_x*2*pi*x_u0[0]/L_x)]), V)
+ic_u = project(as_vector([ic_scale*sin(ic_freq_x*2*pi*x_u0[0]/L_x+ic_freqShift)]), V)
 #ic_u = project(as_vector([ic_scale*posPartofFunction(x_u0[0]*sin(ic_freq_x*2*pi*x_u0[0]/L_x))]), V)
 #ic_u = project(as_vector([ np.power(np.exp(1),(-np.power(1/2*(x_u0[0]-50),2))) ]), V)
 #ic_u = project(as_vector([ic_scale*cos(ic_freq_x*2*pi*x_u0[0]/L_x)]), V)
@@ -434,7 +440,6 @@ if numberTestFunctions == 2:
         + inner(grad(u), grad(testFunctionB))
         )*dx
         
-    epsilonKdVKuraSiva = np.sqrt(1-np.power(kappa,2))
     F_KdVKuraSiva = (inner((u - u_old)/timestep, testFunctionA)
         + inner(dot(u,nabla_grad(u)), testFunctionA)
         + kappa*inner(u_laplace, testFunctionA)
