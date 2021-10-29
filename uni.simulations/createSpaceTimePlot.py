@@ -26,12 +26,12 @@ scriptTimeStamp = scriptTimeStamp.replace(" ","_")
 
 
 ##### PARAMETERS #####
-TITLE = "L=16, kappa=1/100"
+TITLE = "L=128, kappa=1/16, epsilon=sqrt(1-kappa^2), ic~1*rand_20210929"
 inputFolderPath =  scriptFilePath+"/../data/visualizeData/input/"
 dataFolderPath = inputFolderPath+"simulationData/"
 dataFilePath = dataFolderPath+"u.pvd"
 outputParentFolderPath = scriptFilePath + "/../data/visualizeData/output/"    #+timestamp -> kein parent mehr
-STARTTIME = -1              
+STARTTIME = -1             
 ENDTIME = -1           #-1 for all
 SHOWNORMALIZED = True
 ##### PARAMETERS ##### 
@@ -180,7 +180,7 @@ x = np.linspace(Lmin, Lmax, points)
 COLORRESOLUTION = 100
 NUMBEROFCOLORTICKS = 9
 
-print(datetime.datetime.now(),"creating plot") 
+print(datetime.datetime.now(),"assigning plot") 
 fig = plt.figure()
 if SHOWNORMALIZED:
     fig.set_size_inches(16, 9)
@@ -216,11 +216,18 @@ dataAx.set_ylabel("t")
 
 fig.text(0.1, 0,"simulation script    " + pythonFileName + "\n"+"visualization script " +usedVisualizationScriptName, size=10, ha='left', va='bottom')
 
+print(datetime.datetime.now(),"plot assigned") 
 
 
+
+
+
+### show/export plot
+print(datetime.datetime.now(),"plotting")
+plt.savefig(outputFolderPath+"plot.png", dpi = 128, bbox_inches='tight')
+print(datetime.datetime.now(),"exported")
 
 ### write info to file
-
 print(infoString)
 originalInfoFilePath = inputFolderPath+"info.txt"
 if os.path.isfile(originalInfoFilePath):
@@ -228,16 +235,11 @@ if os.path.isfile(originalInfoFilePath):
 infoFile = open(outputFolderPath+"info.txt","a")
 scriptEndTime = datetime.datetime.now()
 scriptTime = scriptEndTime-scriptStartTime
-print(scriptEndTime,"finishing after "+str(scriptTime))  
+print(scriptEndTime,"total visualization time"+" = \t"+str(scriptTime))
 infoString += "\n\t"+"total visualization time"+" = \t"+str(scriptTime)
 infoFile.write("\n\n")
 infoFile.write(infoString)
 infoFile.close()
-
-### show/export plot
-print(datetime.datetime.now(),"plotting")
-plt.savefig(outputFolderPath+"plot.png", dpi = 128, bbox_inches='tight')
-print(datetime.datetime.now(),"exported")
 #plt.show()
 
 

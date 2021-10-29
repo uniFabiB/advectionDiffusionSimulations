@@ -32,20 +32,22 @@ infoString += "\n\t"+"time_start"+" = \t\t"+str(time_start)
 ### PARAMETERS ###
 
 # interval lengths
-L = 16                 #128
+L = 128                 #128
 L_x = L
 
 # spatial steps
-nProL = 64               #8
+nProL = 8               #8
 n_x = L_x*nProL
 
 # times
 numberOfTimestepsPerUnit = 200
-T_end = 10000
+T_end = 2000
 timeInitialUadv = 0.001      ### for miles u_adv need a sine flow until t = 0.01 (otherwise get a stationary solution)
 
 # pde name
-# list of available shortNames: burger/burgers/nonLin, advLap, viscBurgers/burgersHeat/burgerHeat/burgersLap/burgerLap, burgersLap2, KdVKuraSiva
+# list of available shortNames: 
+    #burger/burgers/nonLin, advLap, viscBurgers/burgersHeat/burgerHeat/burgersLap/burgerLap
+    #burgersLap2, KdVKuraSiva, test1function, test2functions
 pdeShortName = "KdVKuraSiva"
 
 # finite elements
@@ -58,9 +60,8 @@ forceZeroAverage = False
 
 # kappa
 #in theta_t + < u_adv, grad theta> + kappa*laplace theta + laplace^2 theta = 0
-kappa = 1/100
-epsilonKdVKuraSiva = np.sqrt(1-np.power(kappa,2))
-#epsilonKdVKuraSiva = 0
+kappa = 1/16
+epsilonKdVKuraSiva = np.sqrt(1-np.power(kappa,2))       # np.sqrt(1-np.power(kappa,2))
 
 
 ### initial condition ###
@@ -70,8 +71,11 @@ ic_freqShift = 0
 ic_scale_x = ic_scale
 ic_freq_x = ic_freq
 randomIC = False
-# possible initial data files 20210929_162000_1024Random1Durch1000Values, 20210929_162000_4096Random1Durch1000Values, 20211026_140000_1024Random1Durch1Values, 20211026_140000_4096Random1Durch1Values 
-loadInitialDataFilename = "20211026_140000_1024Random1Durch1Values"
+# possible initial data files:
+    # 20210929_162000_1024Random1Durch1000Values, 20210929_162000_4096Random1Durch1000Values
+    # 20211026_140000_1024Random1Durch1Values, 20211026_140000_4096Random1Durch1Values
+    # 20211028_113529_1024Random_scale1 
+loadInitialDataFilename = "20211028_113529_1024Random_scale1"
 
 
 ### rescale outputs -> \| . \|_2 = 1 ###
@@ -144,7 +148,9 @@ maxLogOutputsPerSecond = 1
 
 
 ### files
-output_dir_path = os.path.dirname(os.path.realpath(__file__))+"/../data/temp/"
+scriptPath = os.path.dirname(os.path.realpath(__file__))
+output_dir_path = scriptPath+"/../data/temp/"
+initialDataPath = scriptPath+"/initialData/"
 meshFunctionsFilePath = output_dir_path+"simulationData/u.pvd"
 timeFunctionsFilePath = output_dir_path+"simulationData/timeFunctions.pvd"
 infoFilePath = output_dir_path+"info.txt"
@@ -220,7 +226,7 @@ u_adv = Function(V)
 u_adv.assign(0)
 
 if len(loadInitialDataFilename)>0:
-    initialDataLoadingPath = output_dir_path + "../initialData/" + loadInitialDataFilename +".npy"
+    initialDataLoadingPath = initialDataPath + loadInitialDataFilename +".npy"
     infoString += "\n\t"+"initialDataLoadingPath"+" = \t\t"+str(initialDataLoadingPath)
     u0_loaded = np.load(initialDataLoadingPath)
     print(datetime.datetime.now(),"loading initial data " ,"\t", initialDataLoadingPath)
@@ -236,6 +242,13 @@ print(datetime.datetime.now(),"inital values assigned ")
 
 ### functions ###
 ###################################
+def getAverageOfScalarFunction(function):
+    if isinstance(function, Function):
+        thisFunction = function
+    else:
+        thisFunction = project(function,V)      ### when indexed for example theta, theta_laplace = w.split() then theta is not a function but rather Indexed: w_20[0] or something like this
+    sum = np.sum(thisFunction.dat.data)
+    return sum/(n_x)
 def getZeroAverageOfScalarFunction(function):
     if isinstance(function, Function):
         thisFunction = function
@@ -330,6 +343,8 @@ elif pdeShortName in ['advLap']:
     numberTestFunctions = 1
 elif pdeShortName in ['burgersLap']:
     numberTestFunctions = 1
+elif pdeShortName in ['test1function']:
+    numberTestFunctions = 1
 elif pdeShortName in ['advLap2Lap']:
     numberTestFunctions = 2
 elif pdeShortName in ['advLap2']:
@@ -339,6 +354,8 @@ elif pdeShortName in ['burgersLap2']:
 elif pdeShortName in ['kuraSiva']:
     numberTestFunctions = 2
 elif pdeShortName in ['KdVKuraSiva']:
+    numberTestFunctions = 2
+elif pdeShortName in ['test2functions']:
     numberTestFunctions = 2
     
 else:
@@ -407,6 +424,10 @@ if numberTestFunctions == 1:
                 + inner(dot(u,grad(u)), testFunctionA)
                 + kappa * inner(grad(u), grad(testFunctionA))
                 )*dx
+                
+    F_test1function = (inner((u - u_old)/timestep, testFunctionA)
+                + abs(epsilonKdVKuraSiva)*inner(u.dx(0), testFunctionA)
+                )*dx
 
 if numberTestFunctions == 2:
     F_advLap2Lap = (inner((u - u_old)/timestep, testFunctionA)
@@ -448,6 +469,12 @@ if numberTestFunctions == 2:
         + inner(u_laplace, testFunctionB)
         + inner(grad(u), grad(testFunctionB))
         )*dx
+        
+    F_test2functions = (inner((u - u_old)/timestep, testFunctionA)
+        + abs(epsilonKdVKuraSiva)*inner(u_laplace.dx(0), testFunctionA)
+        + inner(u_laplace, testFunctionB)
+        + inner(grad(u), grad(testFunctionB))
+        )*dx
 
 if pdeShortName in ['nonLin']:
     F = F_nonLin
@@ -457,6 +484,8 @@ elif pdeShortName in ['advLap']:
     F = F_advLap
 elif pdeShortName in ['burgersLap']:
     F = F_burgersLap
+elif pdeShortName in ['test1function']:
+    F = F_test1function
 elif pdeShortName in ['advLap2Lap']:
     F = F_advLap2Lap
 elif pdeShortName in ['advLap2']:
@@ -470,6 +499,8 @@ elif pdeShortName in ['KdVKuraSiva']:
     if epsilonKdVKuraSiva != abs(epsilonKdVKuraSiva):
         print(datetime.datetime.now(), "ERROR\t be careful\t epsilon is not real -> taking the absolute value (probably kappa>1)")    # gibt automatisch error weil sqrt(1-kappa²)        
     print(datetime.datetime.now(),"epsilon = ",epsilonKdVKuraSiva)
+elif pdeShortName in ['test2functions']:
+    F = F_test2functions
 else:
     print("ERROR wrong pde short name (not in list)")
 
@@ -538,6 +569,10 @@ L2normU = norm(u,"l2")
 L2timeValuesU[t_iOutput] = L2normU
 L2normTimeFunctionU = Function(VecSpaceTime,L2timeValuesU[:],"||u||")
 
+avgTimeValuesU = np.zeros(numberOfValuesInTimeFunctions)
+avgTimeValuesU[t_iOutput] = getAverageOfScalarFunction(u)
+avgTimeFunctionU = Function(VecSpaceTime,avgTimeValuesU[:],"avg(u)")
+
 L2timeValuesGradU = np.zeros(numberOfValuesInTimeFunctions)
 L2timeValuesGradU[t_iOutput] = norm(grad(u),"l2")
 L2normTimeFunctionGradU = Function(VecSpaceTime,L2timeValuesGradU[:],"||grad u||")
@@ -555,8 +590,9 @@ L2TimeValuesU_adv = np.zeros(numberOfValuesInTimeFunctions)
 L2TimeValuesU_adv[t_iOutput] = norm(u_adv,"l2")
 L2normTimeFunctionU_adv = Function(VecSpaceTime,L2TimeValuesU_adv[:],"||u_adv||")
 
+
 if not writeTimeFunctionsOnlyAtTheEnd:
-    outfile_timeFunctions.write(TimeFunctionTime,L2normTimeFunctionU, L2normTimeFunctionGradU, Hminus1normTimeFunctionU, Hminus1OverL2TimeFunctionU, L2normTimeFunctionU_adv, time=t)
+    outfile_timeFunctions.write(TimeFunctionTime, L2normTimeFunctionU, avgTimeFunctionU, L2normTimeFunctionGradU, Hminus1normTimeFunctionU, Hminus1OverL2TimeFunctionU, L2normTimeFunctionU_adv, time=t)
 
 
 
@@ -620,6 +656,9 @@ while (t < T_end):
         L2normU = norm(u,"l2")
         L2timeValuesU[t_iOutput] = L2normU
         L2normTimeFunctionU = Function(VecSpaceTime,L2timeValuesU[:],"||u||")
+        
+        avgTimeValuesU[t_iOutput] = getAverageOfScalarFunction(u)
+        avgTimeFunctionU = Function(VecSpaceTime,avgTimeValuesU[:],"avg(u)")
     
         L2timeValuesGradU[t_iOutput] = norm(grad(u),"l2")
         L2normTimeFunctionGradU = Function(VecSpaceTime,L2timeValuesGradU[:],"||grad u||")
@@ -635,7 +674,8 @@ while (t < T_end):
         L2normTimeFunctionU_adv = Function(VecSpaceTime,L2TimeValuesU_adv[:],"||u_adv||")
         
         if not writeTimeFunctionsOnlyAtTheEnd:
-            outfile_timeFunctions.write(TimeFunctionTime,L2normTimeFunctionU, L2normTimeFunctionGradU, Hminus1normTimeFunctionU, Hminus1OverL2TimeFunctionU, L2normTimeFunctionU_adv, time=t)
+            outfile_timeFunctions.write(TimeFunctionTime, L2normTimeFunctionU, avgTimeFunctionU, L2normTimeFunctionGradU, Hminus1normTimeFunctionU, Hminus1OverL2TimeFunctionU, L2normTimeFunctionU_adv, time=t)
+
 
     
         ### write output mesh functions ###   
@@ -653,8 +693,8 @@ while (t < T_end):
     lastRealTime = datetime.datetime.now()
     
 if writeTimeFunctionsOnlyAtTheEnd:
-    outfile_timeFunctions.write(TimeFunctionTime,L2normTimeFunctionU, L2normTimeFunctionGradU, Hminus1normTimeFunctionU, Hminus1OverL2TimeFunctionU, L2normTimeFunctionU_adv, time=t)
-    
+    outfile_timeFunctions.write(TimeFunctionTime, L2normTimeFunctionU, avgTimeFunctionU, L2normTimeFunctionGradU, Hminus1normTimeFunctionU, Hminus1OverL2TimeFunctionU, L2normTimeFunctionU_adv, time=t)
+
 time_end = datetime.datetime.now()
 print("ending at ",time_end)
 totalTime = time_end-time_start
