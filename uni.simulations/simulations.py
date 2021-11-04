@@ -75,7 +75,7 @@ randomIC = False
     # 20210929_162000_1024Random1Durch1000Values, 20210929_162000_4096Random1Durch1000Values
     # 20211026_140000_1024Random1Durch1Values, 20211026_140000_4096Random1Durch1Values
     # 20211028_113529_1024Random_scale1 
-loadInitialDataFilename = "20211028_113529_1024Random_scale1"
+loadInitialDataFilename = "test0average"
 
 
 ### rescale outputs -> \| . \|_2 = 1 ###
