@@ -41,7 +41,7 @@ n = L*nProL
 
 # times
 numberOfTimestepsPerUnit = 200
-T_end = 2000
+T_end = 20
 timeInitialUadv = 0.001      ### for miles u_adv need a sine flow until t = 0.01 (otherwise get a stationary solution)
 
 # pde name
@@ -517,7 +517,7 @@ lastRealTime = timeStartSolving
 
 infoString += "\n"
 infoString += "\n\t"+"timeStartSolving"+" = \t\t"+str(timeStartSolving)
-infoFile = open(output_dir_path+"info.txt","a")
+infoFile = open(infoFilePath,"a")
 infoFile.write(infoString)
 infoFile.close()
 infoString = ""
@@ -571,7 +571,7 @@ print("total time ", totalTime)
 infoString += "\n"
 infoString += "\n\t"+"time_end"+" = \t\t"+str(time_end)
 infoString += "\n\t"+"totalTime"+" = \t\t"+str(totalTime)
-infoFile = open(output_dir_path+"info.txt","a")
+infoFile = open(infoFilePath,"a")
 infoFile.write(infoString)
 infoFile.close()
 infoString = ""
