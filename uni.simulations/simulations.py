@@ -34,7 +34,7 @@ infoString += "\n\t"+"time_start"+" = \t\t"+str(time_start)
 # interval lengths
 L = 128                 #128
 L_x = L
-
+ 
 # spatial steps
 nProL = 8               #8
 n_x = L_x*nProL
@@ -75,7 +75,7 @@ randomIC = False
     # 20210929_162000_1024Random1Durch1000Values, 20210929_162000_4096Random1Durch1000Values
     # 20211026_140000_1024Random1Durch1Values, 20211026_140000_4096Random1Durch1Values
     # 20211028_113529_1024Random_scale1 
-loadInitialDataFilename = "test0average"
+loadInitialDataFilename = "20210929_162000_1024Random1Durch1000Values"
 
 
 ### rescale outputs -> \| . \|_2 = 1 ###
@@ -88,8 +88,9 @@ inverseLaplacianEnforceAverageFreeAfter = True
 ### write output only every ... time intervals to save storage space
 writeOutputEvery = 1             # 0 -> every time,
 
-writeTimeFunctionsOnlyAtTheEnd = True           # write output of time functions only at the end to save disk space
- 
+writeTimeFunctionsOnlyAtTheEnd = False           # write output of time functions only at the end to save disk space
+overwriteTimeFunctionsEveryTime = True
+
 ### PARAMETERS END ###
 
 
@@ -590,9 +591,21 @@ L2TimeValuesU_adv = np.zeros(numberOfValuesInTimeFunctions)
 L2TimeValuesU_adv[t_iOutput] = norm(u_adv,"l2")
 L2normTimeFunctionU_adv = Function(VecSpaceTime,L2TimeValuesU_adv[:],"||u_adv||")
 
+avgUhoch3ValuesU = np.zeros(numberOfValuesInTimeFunctions)
+uHoch3 = Function(V)
+uHoch3.dat.data[:] = np.power(ic_u.dat.data[:],3)
+avgUhoch3ValuesU[t_iOutput] = getAverageOfScalarFunction(uHoch3)
+avgUhoch3TimeFunctionU = Function(VecSpaceTime,avgUhoch3ValuesU[:],"avg(u^3)")
 
-if not writeTimeFunctionsOnlyAtTheEnd:
-    outfile_timeFunctions.write(TimeFunctionTime, L2normTimeFunctionU, avgTimeFunctionU, L2normTimeFunctionGradU, Hminus1normTimeFunctionU, Hminus1OverL2TimeFunctionU, L2normTimeFunctionU_adv, time=t)
+avgUUxhoch2ValuesU = np.zeros(numberOfValuesInTimeFunctions)
+uuxHoch2 = assemble(ic_u.sub(0)*ic_u.sub(0)*dx)
+avgUUxhoch2ValuesU[t_iOutput] = uuxHoch2
+avgUUxhoch2TimeFunctionU = Function(VecSpaceTime,avgUUxhoch2ValuesU[:],"avg(u u_x^2)")
+
+
+#if not writeTimeFunctionsOnlyAtTheEnd:
+    #outfile_timeFunctions.write(TimeFunctionTime, L2normTimeFunctionU, avgTimeFunctionU, L2normTimeFunctionGradU, Hminus1normTimeFunctionU, Hminus1OverL2TimeFunctionU, L2normTimeFunctionU_adv, time=t)
+outfile_timeFunctions.write(avgTimeFunctionU, L2normTimeFunctionU, L2normTimeFunctionGradU, avgUUxhoch2TimeFunctionU, avgUhoch3TimeFunctionU, time=t)
 
 
 
@@ -643,8 +656,6 @@ while (t < T_end):
         
     
     
-    
-    
     ##### outputs ###
     if t >= lastWrittenOutput + writeOutputEvery:
         lastWrittenOutput = t
@@ -673,9 +684,20 @@ while (t < T_end):
         L2TimeValuesU_adv[t_iOutput] = norm(u_adv,"l2")
         L2normTimeFunctionU_adv = Function(VecSpaceTime,L2TimeValuesU_adv[:],"||u_adv||")
         
+        uHoch3.dat.data[:] = np.power(u.dat.data[:],3)
+        avgUhoch3ValuesU[t_iOutput] = getAverageOfScalarFunction(uHoch3)
+        avgUhoch3TimeFunctionU = Function(VecSpaceTime,avgUhoch3ValuesU[:],"avg(u^3)")
+        
+        
+        uuxHoch2.dat.data[:] = u.dx(0).dat.data[:]*np.power(u.dat.data[:],2)
+        avgUUxhoch2ValuesU[t_iOutput] = getAverageOfScalarFunction(uuxHoch2)
+        avgUUxhoch2TimeFunctionU = Function(VecSpaceTime,avgUUxhoch2ValuesU[:],"avg(u u_x^2)")
+        
         if not writeTimeFunctionsOnlyAtTheEnd:
-            outfile_timeFunctions.write(TimeFunctionTime, L2normTimeFunctionU, avgTimeFunctionU, L2normTimeFunctionGradU, Hminus1normTimeFunctionU, Hminus1OverL2TimeFunctionU, L2normTimeFunctionU_adv, time=t)
-
+            #outfile_timeFunctions.write(TimeFunctionTime, L2normTimeFunctionU, avgTimeFunctionU, L2normTimeFunctionGradU, Hminus1normTimeFunctionU, Hminus1OverL2TimeFunctionU, L2normTimeFunctionU_adv, time=t)
+            if overwriteTimeFunctionsEveryTime:
+                outfile_timeFunctions = File(timeFunctionsFilePath)
+            outfile_timeFunctions.write(avgTimeFunctionU, L2normTimeFunctionU, L2normTimeFunctionGradU, avgUUxhoch2TimeFunctionU, avgUhoch3TimeFunctionU, time=t)
 
     
         ### write output mesh functions ###   
@@ -693,7 +715,8 @@ while (t < T_end):
     lastRealTime = datetime.datetime.now()
     
 if writeTimeFunctionsOnlyAtTheEnd:
-    outfile_timeFunctions.write(TimeFunctionTime, L2normTimeFunctionU, avgTimeFunctionU, L2normTimeFunctionGradU, Hminus1normTimeFunctionU, Hminus1OverL2TimeFunctionU, L2normTimeFunctionU_adv, time=t)
+    #outfile_timeFunctions.write(TimeFunctionTime, L2normTimeFunctionU, avgTimeFunctionU, L2normTimeFunctionGradU, Hminus1normTimeFunctionU, Hminus1OverL2TimeFunctionU, L2normTimeFunctionU_adv, time=t)
+    outfile_timeFunctions.write(avgTimeFunctionU, L2normTimeFunctionU, L2normTimeFunctionGradU, avgUhoch3TimeFunctionU, time=t)
 
 time_end = datetime.datetime.now()
 print("ending at ",time_end)
