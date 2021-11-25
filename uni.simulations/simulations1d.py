@@ -41,7 +41,7 @@ n = L*nProL
 
 # times
 numberOfTimestepsPerUnit = 200
-T_end = 20
+T_end = 3000
 timeInitialUadv = 0.001      ### for miles u_adv need a sine flow until t = 0.01 (otherwise get a stationary solution)
 
 # pde name
@@ -54,8 +54,8 @@ finitEleFamily = "CG"           #https://www.firedrakeproject.org/variational-pr
 finitEleDegree = 1
 
 
-# force 0 average after every step? True, False12
-forceICZeroAverage = True
+# force 0 average of the initial data? True, False
+forceICZeroAverage = False
 
 # kappa
 #in theta_t + < u_adv, grad theta> + kappa*laplace theta + laplace^2 theta = 0
@@ -72,7 +72,7 @@ randomIC = False
     # 20210929_162000_1024Random1Durch1000Values, 20210929_162000_4096Random1Durch1000Values
     # 20211026_140000_1024Random1Durch1Values, 20211026_140000_4096Random1Durch1Values
     # 20211028_113529_1024Random_scale1 
-loadInitialDataFilename = "20211028_113529_1024Random_scale1"
+loadInitialDataFilename = "u_t-1995_2021-11-22_12-24-27.778384"
 
 
 ### rescale outputs -> \| . \|_2 = 1 ###
@@ -86,7 +86,6 @@ writeOutputEvery = 1             # 0 -> every time,
 overwritePreviousData = False
 
 writeTimeFunctionsOnlyAtTheEnd = True           # write output of time functions only at the end to save writing (-> simulation) time
-
 ### PARAMETERS END ###
 
 
@@ -563,6 +562,9 @@ while (t < T_end):
     
 saveTimeFunctionsArray(t_iOutput+1)
 writeTimeFunctions()
+
+
+
 
 time_end = datetime.datetime.now()
 print("ending at ",time_end)

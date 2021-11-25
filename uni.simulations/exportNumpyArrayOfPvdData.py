@@ -26,22 +26,17 @@ scriptTimeStamp = scriptTimeStamp.replace(" ","_")
 
 
 ##### PARAMETERS #####
-TITLE = "L=128, kappa=1/16, epsilon=sqrt(1-kappa^2), ic=20210929"
-inputFolderPath =  scriptFilePath+"/../data/visualizeData/input/"
+inputFolderPath =  scriptFilePath+"/../data/exportNumpyArray/input/"
 dataFolderPath = inputFolderPath+"simulationData/"
 dataFilePath = dataFolderPath+"u.pvd"
-outputParentFolderPath = scriptFilePath + "/../data/visualizeData/output/"    #+timestamp -> kein parent mehr
-STARTTIME = 1000             
-ENDTIME = -1            #-1 for all
-SHOWNORMALIZED = True
+outputParentFolderPath = scriptFilePath + "/../data/exportNumpyArray/output/"    #+timestamp -> kein parent mehr
+timestepToExport=2000
 ##### PARAMETERS ##### 
 
 
 
 ### copy script to save it ###
-titleNameReplacedCharacters = TITLE.replace(" ","_")
-titleNameReplacedCharacters = titleNameReplacedCharacters.replace("/",":")
-outputFolderPath = outputParentFolderPath+titleNameReplacedCharacters+"_"+scriptTimeStamp+"/"
+outputFolderPath = outputParentFolderPath+scriptTimeStamp+"/"
 os.mkdir(outputFolderPath)
 usedVisualizationScriptName = "used_script_visualization_"+scriptTimeStamp+".py"
 copy(os.path.realpath(__file__), outputFolderPath+usedVisualizationScriptName)
@@ -51,7 +46,7 @@ copy(os.path.realpath(__file__), outputFolderPath+usedVisualizationScriptName)
 ### open pvd to get vtu data files
 pvdXMLTree = ElementTree.parse(dataFilePath)
 pvdXMLTreeRoot = pvdXMLTree.getroot()
-infoString = "visualization info"
+infoString = "numpy export info"
 infoString += "\n\t"+"dataFilePath"+" = \t\t\t"+str(dataFilePath)
 
 pythonFiles = 0
@@ -88,10 +83,9 @@ logEveryXpercent = 10
 nextLogPercentage = logEveryXpercent
 for dataset in pvdXMLTreeRoot[0]:
     timeStep = float(dataset.get('timestep'))
-    if timeStep>=STARTTIME and (timeStep<=ENDTIME or ENDTIME <0):
-        timeFileArrayTemp[i][0]= timeStep
-        timeFileArrayTemp[i][1]= dataset.get('file')
-        i+=1
+    timeFileArrayTemp[i][0]= timeStep
+    timeFileArrayTemp[i][1]= dataset.get('file')
+    i+=1
     if i/len(pvdXMLTreeRoot[0]) > nextLogPercentage/100:
 #        print(datetime.datetime.now(),"loaded "+str(round(i/len(pvdXMLTreeRoot[0])*100))+"% of data file names")
         nextLogPercentage += logEveryXpercent
@@ -160,74 +154,38 @@ print(datetime.datetime.now(),"loaded 100% of data files")
 functionName = vtkArray.GetName()
 infoString += "\n\t"+"functionName"+" = \t\t\t"+str(functionName)
 
-print(datetime.datetime.now(),"creating normalized array") 
-# create normalized data array
-dataArrayNormalized = numpy.copy(dataArray)
-LinftyDataArray = 0
+# finding the best fitting t
+bestT = t[0]
+bestI = 0
 for i in range(filesFound):
-    if max(abs(dataArrayNormalized[i,:]))> LinftyDataArray:
-        LinftyDataArray = max(abs(dataArrayNormalized[i,:]))
-infoString += "\n\t"+"LinftyDataArray"+" = \t\t"+str(LinftyDataArray)
+    if abs(t[i]-timestepToExport)<abs(bestT - timestepToExport):
+        bestT = t[i]
+        bestI = i
+        
+        
+infoString += "\n\t"+"timestepToExport"+" = \t\t\t"+str(timestepToExport)
+infoString += "\n\t"+"bestT"+" = \t\t\t"+str(bestT)
+infoString += "\n\t"+"bestI"+" = \t\t\t"+str(bestI)
 
-for i in range(filesFound):
-    dataArrayNormalized[i,:] = LinftyDataArray/max(abs(dataArrayNormalized[i,:]))*np.copy(dataArrayNormalized[i,:])
-
-
-### plotting ###
-
-# generate 2 2d grids for the x & y bounds
-x = np.linspace(Lmin, Lmax, points)
-
-
-COLORRESOLUTION = 100
-NUMBEROFCOLORTICKS = 9
-
-print(datetime.datetime.now(),"assigning plot") 
-fig = plt.figure()
-if SHOWNORMALIZED:
-    fig.set_size_inches(16, 9)
-else:
-    fig.set_size_inches(10, 9)
-    
-plt.suptitle(TITLE)
-levels = np.linspace(-LinftyDataArray,LinftyDataArray,COLORRESOLUTION+1)
-if SHOWNORMALIZED:
-    dataAx = fig.add_subplot(121)
-else:
-    dataAx = fig.add_subplot(111)
-    
-dataContourf = dataAx.contourf(x,t,dataArray, levels=levels, cmap='coolwarm')
-if SHOWNORMALIZED:
-    dataNormalizedAx = fig.add_subplot(122)
-    dataNormalizedContourf = dataNormalizedAx.contourf(x,t,dataArrayNormalized, levels=101, cmap='coolwarm')
-    colorbar = fig.colorbar(dataContourf,ax=[dataAx,dataNormalizedAx], location='right')        #werte von dataContourf, aber an beiden ([dataAx,dataNormalizedAx]) damit kein ax kleiner wird
-    
-    dataNormalizedAx.set_title("normalized")    
-    dataNormalizedAx.set_xlabel("x")
-    #dataNormalizedAx.yaxis.set_label_position('right')
-    dataNormalizedAx.set_yticks([])  
-    dataNormalizedAx.yaxis.tick_right()
-
-else:
-    colorbar = fig.colorbar(dataContourf,ax=[dataAx], location='right')        #werte von dataContourf, aber an beiden ([dataAx,dataNormalizedAx]) damit kein ax kleiner wird
-ticksLinSpace = np.linspace(-LinftyDataArray,LinftyDataArray,NUMBEROFCOLORTICKS)
-colorbar.set_ticks(ticksLinSpace)
-dataAx.set_title(functionName)
-dataAx.set_xlabel("x")
-dataAx.set_ylabel("t")
-
-fig.text(0.1, 0,"simulation script    " + pythonFileName + "\n"+"visualization script " +usedVisualizationScriptName, size=10, ha='left', va='bottom')
-
-print(datetime.datetime.now(),"plot assigned") 
+# export timestep bestT
+dataArrayBestTime = dataArray[bestI,:]
+# values are twice (by difference cells and points) so e.g. -0.96056498 -0.96056498 -0.8944293 -0.8944293 ...
+#OutputArray = np.zeros(n)
+#for i in range(round(n/2)):
+#    OutputArray[i] = dataArrayBestTime[4*i]
+#    OutputArray[i+round(n/2)] = dataArrayBestTime[4*i]
+for i in range(n):
+    OutputArray[i] = dataArrayBestTime[2*i]
+ 
 
 
+scriptTimeStamp = str(datetime.datetime.now())
+scriptTimeStamp = scriptTimeStamp.replace(":","-")
+scriptTimeStamp = scriptTimeStamp.replace(" ","_")
 
+print(OutputArray)
+np.save(outputFolderPath +functionName+"_t-"+str(bestI)+"_"+scriptTimeStamp, OutputArray)
 
-
-### show/export plot
-print(datetime.datetime.now(),"plotting")
-plt.savefig(outputFolderPath+"plot.png", dpi = 128, bbox_inches='tight')
-print(datetime.datetime.now(),"exported")
 
 ### write info to file
 print(infoString)
@@ -237,8 +195,8 @@ if os.path.isfile(originalInfoFilePath):
 infoFile = open(outputFolderPath+"info.txt","a")
 scriptEndTime = datetime.datetime.now()
 scriptTime = scriptEndTime-scriptStartTime
-print(scriptEndTime,"total visualization time"+" = \t"+str(scriptTime))
-infoString += "\n\t"+"total visualization time"+" = \t"+str(scriptTime)
+print(scriptEndTime,"total time"+" = \t"+str(scriptTime))
+infoString += "\n\t"+"total time"+" = \t"+str(scriptTime)
 infoFile.write("\n\n")
 infoFile.write(infoString)
 infoFile.close()
