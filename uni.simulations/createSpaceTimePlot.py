@@ -149,16 +149,21 @@ for i in range(filesFound):
     vtkArray = readerOutput.GetPointData().GetArray(0)
         #https://stackoverflow.com/a/54072929
         #entweder index (-> 0) oder den namen in <PointData Vectors="function_8[0]">     -> function_8[0]
-    #multiComponentArray only if vector valued function
-    #multiComponentArray = vtk_to_numpy(vtkArray)
-    #dataArray[i,:] = multiComponentArray[:,0]
-    dataArray[i,:] = vtk_to_numpy(vtkArray)
+    dataTemp = vtk_to_numpy(vtkArray)
+    dim = dataTemp.ndim
+    if dim == 1:
+        dataArray[i,:] = dataTemp
+    else:
+        dataArray[i,:] = dataTemp[:,0]
     t[i] = timeFileArray[listOfFilesFound[i]][0]
     if i/filesFound > nextLogPercentage/100:
         print(datetime.datetime.now(),"loaded "+str(round(i/filesFound*100))+"% of data files")
         nextLogPercentage += logEveryXpercent
 print(datetime.datetime.now(),"loaded 100% of data files")
-        
+if dim != 1:
+    warnings.warn("only 0th (1st) component of vector valued function used")
+    
+    
 functionName = vtkArray.GetName()
 infoString += "\n\t"+"functionName"+" = \t\t\t"+str(functionName)
 

@@ -40,7 +40,7 @@ n = L*nProL
 
 # times
 numberOfTimestepsPerUnit = 200
-T_end = 3000
+T_end = 20
 timeInitialUadv = 0.001      ### for miles u_adv need a sine flow until t = 0.01 (otherwise get a stationary solution)
 
 # pde name
