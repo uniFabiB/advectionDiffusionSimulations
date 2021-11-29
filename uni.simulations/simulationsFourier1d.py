@@ -7,16 +7,31 @@ import time
 import datetime
 from numpy import zeros
 from sympy.matrices import inverse
+from sympy.plotting.pygletplot.plot_object import PlotObject
 
 ### parameters ###
 SCRIPTNAME = "simulationFourier"
 OVERWRITEOUTPUT = True
 
-L = 2*np.pi*4
-n = 512
-deltaT = 1
+# pde names: heat, burgers, viscBurgers, kuraSiva
+pdeName = "kuraSiva"
+# ic names:    temp, sin, box, random
+icName = "random"
+factor = 16*2
+L = 2*np.pi*factor
+n = 16*factor
+deltaT = 0.00005
+rampUpToDeltaT = True
 T_0 = 0
-T_end = 10
+T_end = 1000
+icScale = 0.00001
+plotEveryXticks = 1000
+
+plotOnlyAtTheEnd = False
+
+viscBurgersEpsilon = 0.01
+
+exportEveryXtimeValues = -1          # not implemented yet negative -> no export
 ### /parameters ###
 
 ### todo
@@ -79,98 +94,164 @@ x = np.linspace(0,L,n)
 omega = myOmega(n,L)
 
 
-icHat = zeros(n)
-#icHat[0]=0
-#icHat[:17]=np.random.rand(17)-0.5
-#icHat[16] = 1
+if icName in ["temp"]:
+    icHat = zeros(n)
+    icHat[0]=0
+    icHat[:17]=np.random.rand(17)-0.5
+    icHat[16] = icScale
+    icHat[15]= icScale
+    ic = myIFFT(icHat)
+if icName in ["sin"]:
+    ic = icScale*np.sin(x)
+if icName in ["box"]:
+    ic = zeros(n)
+    ic[round(n/4):round(3*n/4)]=icScale
+if icName in ["random"]:
+    ic = icScale*np.random.rand(n)
+    ic -= np.sum(ic)/n
+     
 
-#icHat[15]=1
-
-#icHat = makeHatFourierOfRealFunction(icHat)
-ic = np.sin(x)  
-#ic = myIFFT(icHat)
-#ic = zeros(n)
-#ic[round(n/4):round(3*n/4)]=1
 icHat = myFFT(ic)
-
-
-print("max abs(omega) = "+str(max(abs(omega))))
-
 
 uHat = icHat
 u = ic
-print("l2(icHat) "+str(sum(icHat**2)))
-print("l2(ic) "+str(sum(abs(ic**2))))
-print("l2(uHat) "+str(sum(abs(uHat))))
 
-u = myIFFT(uHat)
-print("fft")
+
+
+print("l2(icHat)\t"+str(sum(icHat**2)))
+print("l2(ic)\t\t"+str(sum(abs(ic**2))))
+print("l2(uHat)\t"+str(sum(abs(uHat))))
+
 
 fig = plt.figure()
-fig.add_subplot(521)
-plt.plot(x.real)
-plt.plot(x.imag, color="orange")
-fig.add_subplot(522)
-plt.plot(omega.real)
-plt.plot(omega.imag, color="orange")
+#ax1 = fig.add_subplot(5,2,1)
+#plt.plot(x.real)
+#plt.plot(x.imag, color="orange")
+#ax2 = fig.add_subplot(5,2,2)
+#plt.plot(omega.real)
+#plt.plot(omega.imag, color="orange")
 
 
 
-fig.add_subplot(523)
-plt.plot(ic.real)
-plt.plot(ic.imag, color="orange")
-
-fig.add_subplot(524)
-plt.plot(icHat.real)
-plt.plot(icHat.imag, color="orange")
-
-
-#plt.plot(xHighPrecision,icHatHighPrecision.real,xHighPrecision,icHatHighPrecision.imag)
-
-plt.subplot(525)
+axIc = fig.add_subplot(2,2,1)
+axIc.title.set_text("ic")
 plt.plot(x,ic.real)
 plt.plot(x,ic.imag, color="orange")
-plt.subplot(526)
+
+axIcHat = fig.add_subplot(2,2,2)
+axIcHat.title.set_text("ic hat")
 plt.plot(omega,icHat.real)
 plt.plot(omega,icHat.imag, color="orange")
 
 
+#plt.plot(xHighPrecision,icHatHighPrecision.real,xHighPrecision,icHatHighPrecision.imag)
+
+axU = plt.subplot(2,2,3)
+axU.title.set_text("u")
+plt.plot(x,ic.real)
+plt.plot(x,ic.imag, color="orange")
+axUhat = plt.subplot(2,2,4)
+axUhat.title.set_text("u hat")
+plt.plot(omega,icHat.real)
+plt.plot(omega,icHat.imag, color="orange")
+
+print(sum(np.power(icHat.real,2)+np.power(icHat.imag,2)))
+
+if not plotOnlyAtTheEnd:
+    plt.ion()
+    plt.show()
+    plt.pause(0.001)
+
 t=T_0
 t_i = 0
 lastLogTime = time.time()
+lastLogTi = 0
+lastPlot = 0
 lastPlotPercent = 0
-plotNumber = 0
-plots = 10
-uRealExport = zeros((plots,n))
-uImagExport = zeros((plots,n))
-uHatRealExport = zeros((plots,n))
-uHatImagExport = zeros((plots,n))
+
+
+exportNumber = 0
+if exportEveryXtimeValues>=0:
+    numberOfExports = round((T_end-T_0)/exportEveryXtimeValues)
+    uRealExport = zeros((numberOfExports,n))
+    uImagExport = zeros((numberOfExports,n))
+    uHatRealExport = zeros((numberOfExports,n))
+    uHatImagExport = zeros((numberOfExports,n))
+else:
+    numberOfExports = -1
+
+
+def getRHS(pdeName=pdeName):
+    if pdeName in ["heat","heatEquation"]:
+        return -(np.power(omega,2))*uHat
+    if pdeName in ["burgers"]:
+        uX = myIFFT(1j*omega*uHat)
+        uuxHat = myFFT(myIFFT(uHat)*uX) 
+        return -uuxHat
+    if pdeName in ["viscBurgers"]:
+        uX = myIFFT(1j*omega*uHat)
+        uuxHat = myFFT(myIFFT(uHat)*uX)
+        return -(uuxHat + viscBurgersEpsilon*(np.power(omega,2))*uHat)
+    if pdeName in ["kuraSivaLin"]:
+        return (np.power(omega,2)-np.power(omega,4))*uHat
+    if pdeName in ["kuraSiva"]:
+        return getRHS(pdeName="kuraSivaLin")+getRHS(pdeName="burgers")
+    
+    
+    
+    
 simulationStartTime = datetime.datetime.now()
+if rampUpToDeltaT:
+    deltaTadjusted = 0.0000000000000001
+else:
+    deltaTadjusted = deltaT
 while t<T_end:
-    rhs = (np.power(omega,2))*uHat
-    deltaTadjusted = min(deltaT,1/max(np.power(omega,2)))   
-    uHat = uHat - deltaTadjusted*rhs
-    if (t/(T_end-T_0)>plotNumber/plots):
-        lastPlotPercent = t/(T_end-T_0)
-        u = myIFFT(uHat)
-        uRealExport[plotNumber,:] = u.real
-        uImagExport[plotNumber,:] = u.imag
-        uHatRealExport[plotNumber,:] = uHat.real
-        uHatImagExport[plotNumber,:] = uHat.imag
-        plotNumber += 1
-    #    uExport[plotNumber-1,:] = myIFFT(uHat)
-    #new = uHat + 1
-    #uHat = new
+    rhs = getRHS()
+    if rampUpToDeltaT:
+        if deltaTadjusted < deltaT:
+            deltaTadjusted *= 1.01
+            print(deltaTadjusted)
+    uHat = uHat + deltaTadjusted*rhs
+    
+    if numberOfExports>0:
+        if t/(T_end-T_0)>exportNumber/numberOfExports:
+            u = myIFFT(uHat)
+            uRealExport[exportNumber,:] = u.real
+            uImagExport[exportNumber,:] = u.imag
+            uHatRealExport[exportNumber,:] = uHat.real
+            uHatImagExport[exportNumber,:] = uHat.imag
+            exportNumber += 1
     if (time.time()-lastLogTime)>1:
+        simulationSpeed = (t_i-lastLogTi)/(time.time()-lastLogTime)
         lastLogTime = time.time()
         now = datetime.datetime.now()
-        if t>0.0000000000001:
+        if t>0.0000000001:
             timeLeft = (now-simulationStartTime)*((T_end-T_0)/t-1)
         else:
             timeLeft = "error"
-        print(str(np.round(t/(T_end-T_0)*100,2))+"%, t_i = "+str(t_i)+", time left "+str(timeLeft))
+        print(str(np.round(t/(T_end-T_0)*100,2))+"%, t_i = "+str(t_i)+", time left "+str(timeLeft)+", speed = "+str(round(simulationSpeed))+" t_i/sec")
+        lastLogTi = t_i
     
     #uHat = (1-myOmega*myOmega)*uHat
+    if t_i >= lastPlot + plotEveryXticks:
+        lastPlot = t_i
+        u = myIFFT(uHat)
+        if not plotOnlyAtTheEnd:
+            axU.clear()
+            axU.title.set_text("u")
+            axUhat.clear()
+            axUhat.title.set_text("u hat")
+        axU.plot(x,u.real)
+        axUhat.plot(omega,uHat.real)
+        if not plotOnlyAtTheEnd:
+            axU.plot(x,u.imag, color="orange")
+            axUhat.plot(omega,uHat.imag, color="orange")
+            plt.pause(0.001)
+        else:
+            axU.plot(x,u.imag)
+            axUhat.plot(omega,uHat.imag)
+            
+        
     t += deltaTadjusted
     t_i += 1
 
@@ -178,31 +259,32 @@ while t<T_end:
 
 u = myIFFT(uHat)
 
-plt.subplot(527)
-plt.plot(x,u.real)
-plt.plot(x,u.imag, color="orange")
-plt.subplot(528)
-plt.plot(omega,uHat.real)
-plt.plot(omega,uHat.imag, color="orange")
+#plt.subplot(5,2,7)
+#plt.plot(x,u.real)
+#plt.plot(x,u.imag, color="orange")
+#plt.subplot(5,2,8)
+#plt.plot(omega,uHat.real)
+#plt.plot(omega,uHat.imag, color="orange")
 
-fig2 = plt.figure()
-axRealStateSpace = fig2.add_subplot(221,projection="3d")
-axImagStateSpace = fig2.add_subplot(222,projection="3d")
-axRealFourierSpace = fig2.add_subplot(223,projection="3d")
-axImagFourierSpace = fig2.add_subplot(224,projection="3d")
+#fig2 = plt.figure()
+#axRealStateSpace = fig2.add_subplot(2,2,1,projection="3d")
+#axImagStateSpace = fig2.add_subplot(2,2,2,projection="3d")
+#axRealFourierSpace = fig2.add_subplot(2,2,3,projection="3d")
+#axImagFourierSpace = fig2.add_subplot(2,2,4,projection="3d")
 #axFourierSpace = fig.add_subplot(5210,projection="3d")
 
-for j in range(uRealExport.shape[0]):
-    ys = j*np.ones(uRealExport.shape[1])
-    axRealStateSpace.plot(x,ys,uRealExport[j,:])
-    axImagStateSpace.plot(x,ys,uImagExport[j,:])
-    axRealFourierSpace.plot(omega,ys,uHatRealExport[j,:])
-    axImagFourierSpace.plot(omega,ys,uHatImagExport[j,:])
+if numberOfExports>0:
+    for j in range(uRealExport.shape[0]):
+        #todo export
+        print(" ")
 
 
 
-plt.show()
-
+if plotOnlyAtTheEnd:
+    plt.show()
 
 
 myUtilities.writeLog()
+
+### stop closing the view
+input("Press [enter] to continue.")
