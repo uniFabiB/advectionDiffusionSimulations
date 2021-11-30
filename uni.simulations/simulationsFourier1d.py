@@ -13,24 +13,33 @@ from sympy.plotting.pygletplot.plot_object import PlotObject
 SCRIPTNAME = "simulationFourier"
 OVERWRITEOUTPUT = True
 
-# pde names: heat, burgers, viscBurgers, kuraSiva
-pdeName = "heat"
+# pde names: heat, burgers, viscBurgers, kuraSiva, kdv, kskdv
+pdeName = "kskdv"
 # ic names:    temp, sin, box, random
 icName = "random"
-L = 4
-n = 64
-deltaT = 0.00005
-rampUpToDeltaT = False
+L = 128
+nPerL = 1
+deltaT = 0.01/np.power(nPerL,4)         # max seems to be (for nPerL>=1) deltaT = 0.02/np.power(nPerL,4)
+rampUpToDeltaT = False                  # start width deltaT small and then increase deltaT by a factor each iteration
 restrictRHSsmallerUhat = False           # decrease deltaT such that deltaT*rhs<uHat such that the change per time step in every mode is always smaller then the function itself
+restrictRHSsmallerUhatMaxRecursionLength = 10
 forceICreal = True 
+forceUreal = True
 T_0 = 0
-T_end = 1
+T_end = 100000
 icScale = 0.00001
 plotEveryXticks = 100
 
 plotOnlyAtTheEnd = False
 
 viscBurgersEpsilon = 0.01
+
+# parameters epsilon u_xxx + delta u_xx + gamma u_xxxx
+# also in ks, kdv
+kappa = 1/16
+epsilon = np.sqrt(1-kappa**2)
+delta = kappa
+gamma = kappa
 
 exportEveryXtimeValues = -1          # not implemented yet negative -> no export
 ### /parameters ###
@@ -59,6 +68,8 @@ exportEveryXtimeValues = -1          # not implemented yet negative -> no export
 # so it always matches the omega for the circle in the e^(i * ...) representation
 # if freq = fftfreq(n,d) d is specified then d (the "spacing") freq(n,d) = freq(n)/(d*n) and for d=1/(Ln) freq(n,d) = L*freq(n)
  
+
+n = round(L*nPerL)
 
 def myFFT(function):
     return np.fft.fft(function, norm="ortho")   # ortho scales unitary, i.e. 1/sqrt(n) for both the fft and the ifft
@@ -92,7 +103,7 @@ if icName in ["temp"]:
     icHat[15]= icScale
     ic = myIFFT(icHat)
 if icName in ["sin"]:
-    ic = icScale*np.sin(x)
+    ic = icScale*np.sin(2*np.pi*x/L)
 if icName in ["box"]:
     ic = zeros(n)
     ic[round(n/4):round(3*n/4)]=icScale
@@ -116,6 +127,7 @@ print("l2(ic)\t\t"+str(sum(abs(ic**2))))
 print("l2(uHat)\t"+str(sum(abs(uHat))))
 
 print("max omega\t"+str(max(abs(omega))))
+print("dx\t"+str(round(1/nPerL,3)))
 
 
 fig = plt.figure()
@@ -142,11 +154,11 @@ plt.plot(omega,icHat.imag, color="orange")
 #plt.plot(xHighPrecision,icHatHighPrecision.real,xHighPrecision,icHatHighPrecision.imag)
 
 axU = plt.subplot(2,2,3)
-axU.title.set_text("u")
+axU.title.set_text("u (x)")
 plt.plot(x,ic.real)
 plt.plot(x,ic.imag, color="orange")
 axUhat = plt.subplot(2,2,4)
-axUhat.title.set_text("u hat")
+axUhat.title.set_text("u hat (omega)")
 plt.plot(omega,icHat.real)
 plt.plot(omega,icHat.imag, color="orange")
 
@@ -188,16 +200,26 @@ def getRHS(pdeName=pdeName):
         uuxHat = myFFT(myIFFT(uHat)*uX)
         return -(uuxHat + viscBurgersEpsilon*(np.power(omega,2))*uHat)
     if pdeName in ["kuraSivaLin"]:
-        return (np.power(omega,2)-np.power(omega,4))*uHat
+        return (delta*np.power(omega,2)-gamma*np.power(omega,4))*uHat
     if pdeName in ["kuraSiva"]:
         return getRHS(pdeName="kuraSivaLin")+getRHS(pdeName="burgers")
+    if pdeName in ["kdv"]:
+        uxxxHat = -1j*np.power(omega,3)*uHat
+        return getRHS("burgers")-epsilon*uxxxHat-0.0001*(np.power(omega,4))*uHat
+    if pdeName in ["kskdv"]:
+        uxxxHat = -1j*np.power(omega,3)*uHat
+        return getRHS(pdeName="kuraSiva")-epsilon*uxxxHat
     
-def getConstSTaGeqCb(a,b,c):
-    if (np.absolute(a)>np.absolute(c*b)).all():
+    
+    
+def getConstSTaGeqCb(a,b,c, recursionsLeft=-1):
+    if recursionsLeft == 0:
+        return c
+    if (np.abs(a)>np.abs(c*b)).all():
         #print(c)
         return c
     else:
-        return getConstSTaGeqCb(a, b, c/2.0)
+        return getConstSTaGeqCb(a, b, c/2.0, recursionsLeft-1)
     
 simulationStartTime = datetime.datetime.now()
 if rampUpToDeltaT:
@@ -207,13 +229,14 @@ else:
     
     
 while t<T_end:
+    if forceUreal:
+        uHat = makeHatFourierOfRealFunction(uHat)
     rhs = getRHS()
     if rampUpToDeltaT:
         if deltaTadjusted < deltaT:
             deltaTadjusted *= 1.01
-            print(deltaTadjusted)
     if restrictRHSsmallerUhat:
-        deltaTadjusted = getConstSTaGeqCb(uHat, rhs, deltaT)
+        deltaTadjusted = getConstSTaGeqCb(uHat, rhs, deltaT, restrictRHSsmallerUhatMaxRecursionLength)
     uHat = uHat + deltaTadjusted*rhs
     
     if numberOfExports>0:
@@ -232,7 +255,7 @@ while t<T_end:
             timeLeft = (now-simulationStartTime)*((T_end-T_0)/t-1)
         else:
             timeLeft = "error"
-        print(str(np.round(t/(T_end-T_0)*100,2))+"%, t_i = "+str(t_i)+", time left "+str(timeLeft)+", speed = "+str(round(simulationSpeed))+" t_i/sec")
+        print(str(np.round(t/(T_end-T_0)*100,2))+"%, t_i = "+str(t_i)+", t = "+str(round(t,2))+", time left "+str(timeLeft)+", time passed "+str(now-simulationStartTime)+", speed = "+str(round(simulationSpeed))+" t_i/sec"+ ", deltaT = "+str(deltaTadjusted))
         lastLogTi = t_i
     #uHat = (1-myOmega*myOmega)*uHat
     if t_i >= lastPlot + plotEveryXticks:
@@ -240,9 +263,9 @@ while t<T_end:
         u = myIFFT(uHat)
         if not plotOnlyAtTheEnd:
             axU.clear()
-            axU.title.set_text("u")
+            axU.title.set_text("u (x)")
             axUhat.clear()
-            axUhat.title.set_text("u hat")
+            axUhat.title.set_text("u hat (omega)")
         axU.plot(x,u.real)
         axUhat.plot(omega,uHat.real)
         if not plotOnlyAtTheEnd:
