@@ -14,18 +14,19 @@ SCRIPTNAME = "simulationFourier"
 OVERWRITEOUTPUT = True
 
 # pde names: heat, burgers, viscBurgers, kuraSiva
-pdeName = "kuraSiva"
+pdeName = "heat"
 # ic names:    temp, sin, box, random
 icName = "random"
-factor = 16*2
-L = 2*np.pi*factor
-n = 16*factor
+L = 4
+n = 64
 deltaT = 0.00005
-rampUpToDeltaT = True
+rampUpToDeltaT = False
+restrictRHSsmallerUhat = False           # decrease deltaT such that deltaT*rhs<uHat such that the change per time step in every mode is always smaller then the function itself
+forceICreal = True 
 T_0 = 0
-T_end = 1000
+T_end = 1
 icScale = 0.00001
-plotEveryXticks = 1000
+plotEveryXticks = 100
 
 plotOnlyAtTheEnd = False
 
@@ -69,23 +70,12 @@ def myOmega(n,L):
     #return np.fft.ifft(functionHat)
 def makeHatFourierOfRealFunction(fHat):
     # takes fHat and transforms it so that f is real
-    inverseOrder = fHat[::-1]
-    fHat[round(n/2)+1:] = inverseOrder[round(n/2):-1]
+    inverseOrderReal = fHat.real[::-1]
+    fHat.real[round(n/2)+1:] = inverseOrderReal[round(n/2):-1]
+    inverseOrderImag = fHat.imag[::-1]
+    fHat.imag[round(n/2)+1:] = -inverseOrderImag[round(n/2):-1]
     return fHat
 
-def check(a,b,c):
-    # if c*a < b return c
-    # else decrease c
-    checkArray = c*a-b
-    if max(checkArray)<0:
-        c=c
-    else:
-        print(c*b)
-        
-        print(a)
-        c = checkArrayAmplitudesAconstBiggerThenB(a, b, c/10)
-    return c
-        
 
 myUtilities.init(SCRIPTNAME, OVERWRITEOUTPUT)
 
@@ -112,6 +102,9 @@ if icName in ["random"]:
      
 
 icHat = myFFT(ic)
+if forceICreal:
+    icHat = makeHatFourierOfRealFunction(icHat)
+    ic = myIFFT(icHat)
 
 uHat = icHat
 u = ic
@@ -121,6 +114,8 @@ u = ic
 print("l2(icHat)\t"+str(sum(icHat**2)))
 print("l2(ic)\t\t"+str(sum(abs(ic**2))))
 print("l2(uHat)\t"+str(sum(abs(uHat))))
+
+print("max omega\t"+str(max(abs(omega))))
 
 
 fig = plt.figure()
@@ -197,20 +192,28 @@ def getRHS(pdeName=pdeName):
     if pdeName in ["kuraSiva"]:
         return getRHS(pdeName="kuraSivaLin")+getRHS(pdeName="burgers")
     
-    
-    
+def getConstSTaGeqCb(a,b,c):
+    if (np.absolute(a)>np.absolute(c*b)).all():
+        #print(c)
+        return c
+    else:
+        return getConstSTaGeqCb(a, b, c/2.0)
     
 simulationStartTime = datetime.datetime.now()
 if rampUpToDeltaT:
-    deltaTadjusted = 0.0000000000000001
+    deltaTadjusted = 0.00000000001
 else:
     deltaTadjusted = deltaT
+    
+    
 while t<T_end:
     rhs = getRHS()
     if rampUpToDeltaT:
         if deltaTadjusted < deltaT:
             deltaTadjusted *= 1.01
             print(deltaTadjusted)
+    if restrictRHSsmallerUhat:
+        deltaTadjusted = getConstSTaGeqCb(uHat, rhs, deltaT)
     uHat = uHat + deltaTadjusted*rhs
     
     if numberOfExports>0:
@@ -231,7 +234,6 @@ while t<T_end:
             timeLeft = "error"
         print(str(np.round(t/(T_end-T_0)*100,2))+"%, t_i = "+str(t_i)+", time left "+str(timeLeft)+", speed = "+str(round(simulationSpeed))+" t_i/sec")
         lastLogTi = t_i
-    
     #uHat = (1-myOmega*myOmega)*uHat
     if t_i >= lastPlot + plotEveryXticks:
         lastPlot = t_i
@@ -249,12 +251,10 @@ while t<T_end:
             plt.pause(0.001)
         else:
             axU.plot(x,u.imag)
-            axUhat.plot(omega,uHat.imag)
-            
+            axUhat.plot(omega,uHat.imag)   
         
     t += deltaTadjusted
     t_i += 1
-
 
 
 u = myIFFT(uHat)
