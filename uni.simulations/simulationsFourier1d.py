@@ -13,40 +13,39 @@ from sympy.plotting.pygletplot.plot_object import PlotObject
 SCRIPTNAME = "simulationFourier"
 OVERWRITEOUTPUT = True
 
-# pde names: heat, burgers, viscBurgers, kuraSiva, kdv, kskdv
-pdeName = "kskdv"
+# pde names: heat, burgers, viscBurgers, kuraSiva, kdv, hyperViscKdv, kskdv
+pdeName = "hyperViscKdv"
 # ic names:    temp, sin, box, random
-icName = "random"
-L = 128
-nPerL = 1
-deltaT = 0.01/np.power(nPerL,4)         # max seems to be (for nPerL>=1) deltaT = 0.02/np.power(nPerL,4)
+icName = "sin"
+L = 2*np.pi
+nPerL = 8
+deltaT = 0.0001         # max seems to be (for nPerL>=1) deltaT = 0.02/np.power(nPerL,4)
 rampUpToDeltaT = False                  # start width deltaT small and then increase deltaT by a factor each iteration
 restrictRHSsmallerUhat = False           # decrease deltaT such that deltaT*rhs<uHat such that the change per time step in every mode is always smaller then the function itself
-restrictRHSsmallerUhatMaxRecursionLength = 10
+restrictRHSsmallerUhatMaxRecursionLength = 2
 forceICreal = True 
-forceUreal = True
+forceUreal = False
 T_0 = 0
 T_end = 100000
-icScale = 0.00001
+icScale = 1
 plotEveryXticks = 100
 
-plotOnlyAtTheEnd = False
+plotDuringSimulation = True
 
-viscBurgersEpsilon = 0.01
+viscBurgersEpsilon = 0.001
 
 # parameters epsilon u_xxx + delta u_xx + gamma u_xxxx
 # also in ks, kdv
-kappa = 1/16
-epsilon = np.sqrt(1-kappa**2)
-delta = kappa
-gamma = kappa
+kappa = 1
+epsilon = 0.022 #np.sqrt(1-kappa**2)    #epsilon*u_xxx
+delta = 1 #kappa                    #delta*u_xx
+gamma = 0.0001 #kappa              #gamma*u_xxxx
 
 exportEveryXtimeValues = -1          # not implemented yet negative -> no export
 ### /parameters ###
 
 ### todo
-    ### todo omega² oder omega⁴ * small schaukelt sich auf
-    ### sin(x) für L=4pi passt nicht
+    ### check convergence
     ### fourier transform amplitude checken
 
 
@@ -164,7 +163,7 @@ plt.plot(omega,icHat.imag, color="orange")
 
 print(sum(np.power(icHat.real,2)+np.power(icHat.imag,2)))
 
-if not plotOnlyAtTheEnd:
+if plotDuringSimulation:
     plt.ion()
     plt.show()
     plt.pause(0.001)
@@ -205,7 +204,10 @@ def getRHS(pdeName=pdeName):
         return getRHS(pdeName="kuraSivaLin")+getRHS(pdeName="burgers")
     if pdeName in ["kdv"]:
         uxxxHat = -1j*np.power(omega,3)*uHat
-        return getRHS("burgers")-epsilon*uxxxHat-0.0001*(np.power(omega,4))*uHat
+        return getRHS("burgers")-epsilon*uxxxHat
+    if pdeName in ["hyperViscKdv"]:
+        uxxxHat = -1j*np.power(omega,3)*uHat
+        return getRHS("burgers")-epsilon*uxxxHat-gamma*(np.power(omega,4))*uHat
     if pdeName in ["kskdv"]:
         uxxxHat = -1j*np.power(omega,3)*uHat
         return getRHS(pdeName="kuraSiva")-epsilon*uxxxHat
@@ -261,14 +263,14 @@ while t<T_end:
     if t_i >= lastPlot + plotEveryXticks:
         lastPlot = t_i
         u = myIFFT(uHat)
-        if not plotOnlyAtTheEnd:
+        if plotDuringSimulation:
             axU.clear()
             axU.title.set_text("u (x)")
             axUhat.clear()
             axUhat.title.set_text("u hat (omega)")
         axU.plot(x,u.real)
         axUhat.plot(omega,uHat.real)
-        if not plotOnlyAtTheEnd:
+        if plotDuringSimulation:
             axU.plot(x,u.imag, color="orange")
             axUhat.plot(omega,uHat.imag, color="orange")
             plt.pause(0.001)
@@ -303,7 +305,7 @@ if numberOfExports>0:
 
 
 
-if plotOnlyAtTheEnd:
+if not plotDuringSimulation:
     plt.show()
 
 
