@@ -1,4 +1,4 @@
-import myUtilities
+#unnötig import myUtilities
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -10,38 +10,38 @@ from sympy.matrices import inverse
 from sympy.plotting.pygletplot.plot_object import PlotObject
 
 ### parameters ###
-SCRIPTNAME = "simulationFourier"
-OVERWRITEOUTPUT = True
+#unnötig SCRIPTNAME = "simulationFourier"
+#unnötig OVERWRITEOUTPUT = True
 
 # pde names: heat, burgers, viscBurgers, kuraSiva, kdv, hyperViscKdv, kskdv
 pdeName = "viscBurgers"
 # ic names:    temp, sin, box, random
 icName = "sin"
 L = 2*np.pi
-nPerL = 8
-deltaT = 0.0000000000001         # max seems to be (for nPerL>=1) deltaT = 0.02/np.power(nPerL,4)
-rampUpToDeltaT = False                  # start width deltaT small and then increase deltaT by a factor each iteration
-restrictRHSsmallerUhat = False           # decrease deltaT such that deltaT*rhs<uHat such that the change per time step in every mode is always smaller then the function itself
-restrictRHSsmallerUhatMaxRecursionLength = 2
+nPerL = 16*2
+deltaT = 0.0001         # max seems to be (for nPerL>=1) deltaT = 0.02/np.power(nPerL,4)
+#unnötig rampUpToDeltaT = False                  # start width deltaT small and then increase deltaT by a factor each iteration
+restrictRHSsmallerUhat = True           # decrease deltaT such that deltaT*rhs<uHat such that the change per time step in every mode is always smaller then the function itself
+restrictRHSsmallerUhatMaxRecursionLength = 10   # nachdem deltaT = deltaT/2 so oft probiert wurde nimmt es dann dieses deltaT egal ob es kleiner ist oder nicht
 forceICreal = True 
 forceUreal = False
 T_0 = 0
-T_end = 1
+T_end = 10
 icScale = 1
-plotEveryXticks = 100
+plotEveryXticks = 1000
 
-plotDuringSimulation = True
+plotDuringSimulation = True                 # plotten verlangsamt das extrem
 
-viscBurgersEpsilon = 0.001
+viscBurgersEpsilon = 0.03
 
 # parameters epsilon u_xxx + delta u_xx + gamma u_xxxx
 # also in ks, kdv
-kappa = 1
-epsilon = 0.022 #np.sqrt(1-kappa**2)    #epsilon*u_xxx
-delta = 1 #kappa                    #delta*u_xx
-gamma = 0.0001 #kappa              #gamma*u_xxxx
+#unnötig kappa = 1
+#unnötig epsilon = 0.022 #np.sqrt(1-kappa**2)    #epsilon*u_xxx
+#unnötig delta = 1 #kappa                    #delta*u_xx
+#unnötig gamma = 0.0001 #kappa              #gamma*u_xxxx
 
-exportEveryXtimeValues = -1          # not implemented yet negative -> no export
+exportEveryXtimeValues = -1             # negative for no export
 ### /parameters ###
 
 ### todo
@@ -88,7 +88,7 @@ def makeHatFourierOfRealFunction(fHat):
     return fHat
 
 
-myUtilities.init(SCRIPTNAME, OVERWRITEOUTPUT)
+#unnötig myUtilities.init(SCRIPTNAME, OVERWRITEOUTPUT)
 
 
 x = np.linspace(0,L,n)
@@ -122,21 +122,15 @@ u = ic
 
 
 
-print("l2(icHat)\t"+str(sum(icHat**2)))
-print("l2(ic)\t\t"+str(sum(abs(ic**2))))
-print("l2(uHat)\t"+str(sum(abs(uHat))))
+#unnötig print("l2(icHat)\t"+str(sum(icHat**2)))
+#unnötig print("l2(ic)\t\t"+str(sum(abs(ic**2))))
+#unnötig print("l2(uHat)\t"+str(sum(abs(uHat))))
 
-print("max omega\t"+str(max(abs(omega))))
-print("dx\t"+str(round(1/nPerL,3)))
+#unnötig print("max omega\t"+str(max(abs(omega))))
+#unnötig print("dx\t"+str(round(1/nPerL,3)))
 
 
 fig = plt.figure()
-#ax1 = fig.add_subplot(5,2,1)
-#plt.plot(x.real)
-#plt.plot(x.imag, color="orange")
-#ax2 = fig.add_subplot(5,2,2)
-#plt.plot(omega.real)
-#plt.plot(omega.imag, color="orange")
 
 
 
@@ -151,8 +145,6 @@ plt.plot(omega,icHat.real)
 plt.plot(omega,icHat.imag, color="orange")
 
 
-#plt.plot(xHighPrecision,icHatHighPrecision.real,xHighPrecision,icHatHighPrecision.imag)
-
 axU = plt.subplot(2,2,3)
 axU.title.set_text("u (x)")
 plt.plot(x,ic.real)
@@ -162,7 +154,7 @@ axUhat.title.set_text("u hat (omega)")
 plt.plot(omega,icHat.real)
 plt.plot(omega,icHat.imag, color="orange")
 
-print(sum(np.power(icHat.real,2)+np.power(icHat.imag,2)))
+#unnötig print(sum(np.power(icHat.real,2)+np.power(icHat.imag,2)))
 
 if plotDuringSimulation:
     plt.ion()
@@ -189,8 +181,8 @@ else:
 
 
 def getRHS(pdeName=pdeName):
-    if pdeName in ["heat","heatEquation"]:
-        return -(np.power(omega,2))*uHat
+#unnötig     if pdeName in ["heat","heatEquation"]:
+#unnötig         return -(np.power(omega,2))*uHat
     if pdeName in ["burgers"]:
         uX = myIFFT(1j*omega*uHat)
         uuxHat = myFFT(myIFFT(uHat)*uX) 
@@ -199,19 +191,19 @@ def getRHS(pdeName=pdeName):
         uX = myIFFT(1j*omega*uHat)
         uuxHat = myFFT(myIFFT(uHat)*uX)
         return -(uuxHat + viscBurgersEpsilon*(np.power(omega,2))*uHat)
-    if pdeName in ["kuraSivaLin"]:
-        return (delta*np.power(omega,2)-gamma*np.power(omega,4))*uHat
-    if pdeName in ["kuraSiva"]:
-        return getRHS(pdeName="kuraSivaLin")+getRHS(pdeName="burgers")
-    if pdeName in ["kdv"]:
-        uxxxHat = -1j*np.power(omega,3)*uHat
-        return getRHS("burgers")-epsilon*uxxxHat
-    if pdeName in ["hyperViscKdv"]:
-        uxxxHat = -1j*np.power(omega,3)*uHat
-        return getRHS("burgers")-epsilon*uxxxHat-gamma*(np.power(omega,4))*uHat
-    if pdeName in ["kskdv"]:
-        uxxxHat = -1j*np.power(omega,3)*uHat
-        return getRHS(pdeName="kuraSiva")-epsilon*uxxxHat
+#unnötig     if pdeName in ["kuraSivaLin"]:
+#unnötig         return (delta*np.power(omega,2)-gamma*np.power(omega,4))*uHat
+#unnötig     if pdeName in ["kuraSiva"]:
+#unnötig         return getRHS(pdeName="kuraSivaLin")+getRHS(pdeName="burgers")
+#unnötig     if pdeName in ["kdv"]:
+#unnötig         uxxxHat = -1j*np.power(omega,3)*uHat
+#unnötig         return getRHS("burgers")-epsilon*uxxxHat
+#unnötig     if pdeName in ["hyperViscKdv"]:
+#unnötig         uxxxHat = -1j*np.power(omega,3)*uHat
+#unnötig         return getRHS("burgers")-epsilon*uxxxHat-gamma*(np.power(omega,4))*uHat
+#unnötig     if pdeName in ["kskdv"]:
+#unnötig         uxxxHat = -1j*np.power(omega,3)*uHat
+#unnötig         return getRHS(pdeName="kuraSiva")-epsilon*uxxxHat
     
     
     
@@ -225,19 +217,19 @@ def getConstSTaGeqCb(a,b,c, recursionsLeft=-1):
         return getConstSTaGeqCb(a, b, c/2.0, recursionsLeft-1)
     
 simulationStartTime = datetime.datetime.now()
-if rampUpToDeltaT:
-    deltaTadjusted = 0.00000000001
-else:
-    deltaTadjusted = deltaT
+#unnötig if rampUpToDeltaT:
+#unnötig     deltaTadjusted = 0.00000000001
+#unnötig else:
+#unnötig     deltaTadjusted = deltaT
     
     
 while t<T_end:
     if forceUreal:
         uHat = makeHatFourierOfRealFunction(uHat)
     rhs = getRHS()
-    if rampUpToDeltaT:
-        if deltaTadjusted < deltaT:
-            deltaTadjusted *= 1.01
+#unnötig     if rampUpToDeltaT:
+#unnötig         if deltaTadjusted < deltaT:
+#unnötig             deltaTadjusted *= 1.01
     if restrictRHSsmallerUhat:
         deltaTadjusted = getConstSTaGeqCb(uHat, rhs, deltaT, restrictRHSsmallerUhatMaxRecursionLength)
     uHat = uHat + deltaTadjusted*rhs
@@ -254,7 +246,7 @@ while t<T_end:
         simulationSpeed = (t_i-lastLogTi)/(time.time()-lastLogTime)
         lastLogTime = time.time()
         now = datetime.datetime.now()
-        if t>0.0000000001:
+        if t>0.0000000001:          # wenn t zu klein ist kann es sein dass es nen fehler gibt bei der berechnung der zeit die das skript noch braucht
             timeLeft = (now-simulationStartTime)*((T_end-T_0)/t-1)
         else:
             timeLeft = "error"
@@ -299,21 +291,18 @@ u = myIFFT(uHat)
 #axImagFourierSpace = fig2.add_subplot(2,2,4,projection="3d")
 #axFourierSpace = fig.add_subplot(5210,projection="3d")
 
-
-### mitja schreiben export
-
 if numberOfExports>0:
     for j in range(uRealExport.shape[0]):
-        #todo export
-        print(" ")
-
+        np.save("uRealExport", uRealExport)
+        # np.save("uImagExport", uImagExport)
+        
 
 
 if not plotDuringSimulation:
     plt.show()
 
 
-myUtilities.writeLog()
+#myUtilities.writeLog()
 
 ### stop closing the view
 input("Press [enter] to continue.")
