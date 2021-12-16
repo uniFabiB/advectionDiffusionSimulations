@@ -28,13 +28,13 @@ scriptTimeStamp = scriptTimeStamp.replace(" ","_")
 
 
 ##### PARAMETERS #####
-TITLE = "L=128, kappa=1/16, epsilon=sqrt(1-kappa^2), ic=20210929"
+TITLE = "L=128, kappa=1/2, epsilon=sqrt(1-kappa^2), ic=20211028_113529_1024Random_scale1"
 inputFolderPath =  scriptFilePath+"/../data/visualizeData/input/"
 dataFolderPath = inputFolderPath+"simulationData/"
 dataFilePath = dataFolderPath+"u.pvd"
 outputParentFolderPath = scriptFilePath + "/../data/visualizeData/output/"    #+timestamp -> kein parent mehr
-STARTTIME = 1000             
-ENDTIME = -1            #-1 for all
+STARTTIME = 0             
+ENDTIME = 25000            #-1 for all
 SHOWNORMALIZED = True
 ##### PARAMETERS ##### 
 
@@ -190,11 +190,15 @@ COLORRESOLUTION = 100
 NUMBEROFCOLORTICKS = 9
 
 print(datetime.datetime.now(),"assigning plot") 
+# default figsize [6.4, 4.8]
+additionalFigHeight = 0
+if ENDTIME-STARTTIME > 1010:    # 1010 since starttime -1 and end 1000 would give 1001 
+    additionalFigHeight = (ENDTIME-STARTTIME - 1000)/1000*3/4*9 # factor 3/4 because the actual plot takes about 3/4 of the whole picture
 fig = plt.figure()
 if SHOWNORMALIZED:
-    fig.set_size_inches(16, 9)
+    fig.set_size_inches(16, 9+additionalFigHeight)
 else:
-    fig.set_size_inches(10, 9)
+    fig.set_size_inches(10, 9+additionalFigHeight)
     
 plt.suptitle(TITLE)
 levels = np.linspace(-LinftyDataArray,LinftyDataArray,COLORRESOLUTION+1)

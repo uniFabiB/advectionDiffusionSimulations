@@ -40,7 +40,7 @@ n = L*nProL
 
 # times
 numberOfTimestepsPerUnit = 200
-T_end = 20
+T_end = 25000
 timeInitialUadv = 0.001      ### for miles u_adv need a sine flow until t = 0.01 (otherwise get a stationary solution)
 
 # pde name
@@ -58,7 +58,7 @@ forceICZeroAverage = False
 
 # kappa
 #in theta_t + < u_adv, grad theta> + kappa*laplace theta + laplace^2 theta = 0
-kappa = 1/16
+kappa = 1/2
 epsilonKdVKuraSiva = np.sqrt(1-np.power(kappa,2))       # np.sqrt(1-np.power(kappa,2))
 
 
@@ -71,7 +71,7 @@ randomIC = False
     # 20210929_162000_1024Random1Durch1000Values, 20210929_162000_4096Random1Durch1000Values
     # 20211026_140000_1024Random1Durch1Values, 20211026_140000_4096Random1Durch1Values
     # 20211028_113529_1024Random_scale1 
-loadInitialDataFilename = "20210929_162000_1024Random1Durch1000Values"
+loadInitialDataFilename = "20211028_113529_1024Random_scale1"
 
 
 ### rescale outputs -> \| . \|_2 = 1 ###
