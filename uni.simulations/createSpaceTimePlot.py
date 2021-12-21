@@ -28,13 +28,13 @@ scriptTimeStamp = scriptTimeStamp.replace(" ","_")
 
 
 ##### PARAMETERS #####
-TITLE = "L=128, kappa=1/2, epsilon=sqrt(1-kappa^2), ic=20211028_113529_1024Random_scale1"
+TITLE = "L=128, kappa=100/101, epsilon=sqrt(1-kappa^2), ic=20211028_113529_1024Random_scale1"
 inputFolderPath =  scriptFilePath+"/../data/visualizeData/input/"
 dataFolderPath = inputFolderPath+"simulationData/"
 dataFilePath = dataFolderPath+"u.pvd"
 outputParentFolderPath = scriptFilePath + "/../data/visualizeData/output/"    #+timestamp -> kein parent mehr
-STARTTIME = 0             
-ENDTIME = 25000            #-1 for all
+STARTTIME = -1             
+ENDTIME = 1000            #-1 for all
 SHOWNORMALIZED = True
 ##### PARAMETERS ##### 
 
@@ -192,8 +192,16 @@ NUMBEROFCOLORTICKS = 9
 print(datetime.datetime.now(),"assigning plot") 
 # default figsize [6.4, 4.8]
 additionalFigHeight = 0
-if ENDTIME-STARTTIME > 1010:    # 1010 since starttime -1 and end 1000 would give 1001 
-    additionalFigHeight = (ENDTIME-STARTTIME - 1000)/1000*3/4*9 # factor 3/4 because the actual plot takes about 3/4 of the whole picture
+if ENDTIME < 0:
+    actualEndTime = max(t)
+else:
+    actualEndTime = ENDTIME
+if STARTTIME < 0:
+    actualStartTime = min(t)
+else:
+    actualStartTime = STARTTIME
+if actualEndTime-actualStartTime > 1000: 
+    additionalFigHeight = (actualEndTime-actualStartTime - 1000)/1000*3/4*9 # factor 3/4 because the actual plot takes about 3/4 of the whole picture
 fig = plt.figure()
 if SHOWNORMALIZED:
     fig.set_size_inches(16, 9+additionalFigHeight)

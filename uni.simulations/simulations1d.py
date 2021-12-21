@@ -40,7 +40,7 @@ n = L*nProL
 
 # times
 numberOfTimestepsPerUnit = 200
-T_end = 25000
+T_end = 100000
 timeInitialUadv = 0.001      ### for miles u_adv need a sine flow until t = 0.01 (otherwise get a stationary solution)
 
 # pde name
@@ -58,7 +58,7 @@ forceICZeroAverage = False
 
 # kappa
 #in theta_t + < u_adv, grad theta> + kappa*laplace theta + laplace^2 theta = 0
-kappa = 1/2
+kappa = 100/101
 epsilonKdVKuraSiva = np.sqrt(1-np.power(kappa,2))       # np.sqrt(1-np.power(kappa,2))
 
 
