@@ -187,19 +187,24 @@ timeFunctionsReader.SetFileName(timeDataFilePath)
 timeFunctionsReader.Update()
 timeFunctionsReaderOutput = timeFunctionsReader.GetOutput()
 
+
+
+
 timeFunctionsTimeVtkArray = timeFunctionsReaderOutput.GetPointData().GetArray("time")
-kdvSpeedVtkArray = timeFunctionsReaderOutput.GetPointData().GetArray("kdv speed")
-
 # create timeFunctionsTime from spatial functions in case no timefunctino "time" is given (old simulations)
-spatialTimeUnfiltered = np.zeros(len(pvdXMLTreeRoot[0]))
-for i in range(len(spatialTimeUnfiltered)):
-    if timeFileArrayTemp[i][0]== "":
-        spatialTimeUnfiltered[i] = -99999
-    else:
-        spatialTimeUnfiltered[i] = timeFileArrayTemp[i][0]
-timeFunctionsTimeUnfiltered = spatialTimeUnfiltered
+#spatialTimeUnfiltered = np.zeros(len(pvdXMLTreeRoot[0]))
+#for i in range(len(spatialTimeUnfiltered)):
+#    if timeFileArrayTemp[i][0]== "":
+#        spatialTimeUnfiltered[i] = -99999
+#    else:
+#        spatialTimeUnfiltered[i] = timeFileArrayTemp[i][0]
+#timeFunctionsTimeUnfiltered = spatialTimeUnfiltered
+timeFunctionsTimeUnfiltered = vtk_to_numpy(timeFunctionsTimeVtkArray)
 
-#timeFunctionsTimeUnfiltered = vtk_to_numpy(timeFunctionsTimeVtkArray)
+
+
+
+kdvSpeedVtkArray = timeFunctionsReaderOutput.GetPointData().GetArray("kdv speed")
 
 kdvSpeedUnfiltered = vtk_to_numpy(kdvSpeedVtkArray)
 
