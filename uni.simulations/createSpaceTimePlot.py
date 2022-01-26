@@ -330,7 +330,6 @@ else:
 print(datetime.datetime.now(),"exported")
 
 ### write info to file
-print(infoString)
 if not(DEBUGGING):
     if os.path.isfile(originalInfoFilePath):
         copy(originalInfoFilePath, outputFolderPath+"info.txt")
@@ -339,9 +338,7 @@ scriptEndTime = datetime.datetime.now()
 scriptTime = scriptEndTime-scriptStartTime
 print(scriptEndTime,"total visualization time"+" = \t"+str(scriptTime))
 infoString += "\n\t"+"total visualization time"+" = \t"+str(scriptTime)
-if DEBUGGING:
-    print(infoString)
-else:
+if not(DEBUGGING):
     infoFile.write("\n\n")
     infoFile.write(infoString)
     infoFile.close()
