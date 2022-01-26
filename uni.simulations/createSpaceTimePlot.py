@@ -1,5 +1,4 @@
 import numpy
-TITLE = "kappa = "
 import vtk 
 import os
 import xml.etree.ElementTree as ElementTree
@@ -28,25 +27,41 @@ scriptTimeStamp = scriptTimeStamp.replace(" ","_")
 
 
 ##### PARAMETERS #####
-TITLE = "L=128, kappa=100/101, epsilon=sqrt(1-kappa^2), ic=20211028_113529_1024Random_scale1"
+TITLE = "L=128, kappa=REPLACEKAPPABYSCRIPT, epsilon=sqrt(1-kappa^2), ic=20211028_113529_1024Random_scale1"
 inputFolderPath =  scriptFilePath+"/../data/visualizeData/input/"
 dataFolderPath = inputFolderPath+"simulationData/"
 dataFilePath = dataFolderPath+"u.pvd"
+timeDataFilePath = dataFolderPath+"timeFunctions_0.vtu"
+originalInfoFilePath = inputFolderPath+"info.txt"
 outputParentFolderPath = scriptFilePath + "/../data/visualizeData/output/"    #+timestamp -> kein parent mehr
-STARTTIME = -1             
-ENDTIME = 1000            #-1 for all
+STARTTIME = 75000
+ENDTIME = STARTTIME+25000            #-1 for all
 SHOWNORMALIZED = True
-##### PARAMETERS ##### 
-
+FREEZSOLUTION = True
+##### PARAMETERS #####
+DEBUGGING = False
 
 
 ### copy script to save it ###
+infoFile = open(originalInfoFilePath,"r")
+kappa = "undefined"
+for line in infoFile:
+    kappaSearchString = "kappa = \t\t"
+    kappaEndString = "\n"
+    if line.find(kappaSearchString)>-1:
+        indexKappa = line.index(kappaSearchString);
+        indexEndKappa = line.index(kappaEndString);
+        kappa = line[indexKappa+len(kappaSearchString):indexEndKappa]
+if kappa == "undefined":
+    warnings.warn(str("kappa not found in infofile"))
+TITLE = TITLE.replace("REPLACEKAPPABYSCRIPT", str(kappa))
 titleNameReplacedCharacters = TITLE.replace(" ","_")
 titleNameReplacedCharacters = titleNameReplacedCharacters.replace("/",":")
 outputFolderPath = outputParentFolderPath+titleNameReplacedCharacters+"_"+scriptTimeStamp+"/"
-os.mkdir(outputFolderPath)
 usedVisualizationScriptName = "used_script_visualization_"+scriptTimeStamp+".py"
-copy(os.path.realpath(__file__), outputFolderPath+usedVisualizationScriptName)
+if not(DEBUGGING):
+    os.mkdir(outputFolderPath)
+    copy(os.path.realpath(__file__), outputFolderPath+usedVisualizationScriptName)
 ### copy script to save it ###
 
 
@@ -71,7 +86,8 @@ for searchPath in searchPaths:
 if pythonFiles != 1:
     raise Exception(str("\t\t\t"+str(pythonFiles)+" pyhton files in data directory ("+str(dataFolderPath+"/..")+" and "+dataFolderPath+") gefunden"+"\nt\t\tnot copying any simulation script files\n"))
 else:
-    copy(pythonFilesInDirPaths,outputFolderPath)
+    if not(DEBUGGING):
+        copy(pythonFilesInDirPaths,outputFolderPath)
     
 infoString += "\n\t"+"simulation script"+" = \t\t"+str(pythonFilesInDirPaths)
 
@@ -106,6 +122,8 @@ timeFileArray = timeFileArrayTemp[0:numberOfFiles][:]
 
 ### read first vtu file to get mesh data 
 print(datetime.datetime.now(),"loading first file for mesh data") 
+if len(timeFileArray) == 0:
+    raise Exception("no matching files found for this time range")
 data = meshio.read(dataFolderPath+timeFileArray[0][1])
 Lmin=min(data.points[:,0])
 Lmax=max(data.points[:,0])
@@ -163,9 +181,69 @@ print(datetime.datetime.now(),"loaded 100% of data files")
 if dim != 1:
     warnings.warn("only 0th (1st) component of vector valued function used")
     
+# load time data file
+timeFunctionsReader = vtk.vtkXMLUnstructuredGridReader()
+timeFunctionsReader.SetFileName(timeDataFilePath)
+timeFunctionsReader.Update()
+timeFunctionsReaderOutput = timeFunctionsReader.GetOutput()
+
+timeFunctionsTimeVtkArray = timeFunctionsReaderOutput.GetPointData().GetArray("time")
+kdvSpeedVtkArray = timeFunctionsReaderOutput.GetPointData().GetArray("kdv speed")
+
+# create timeFunctionsTime from spatial functions in case no timefunctino "time" is given (old simulations)
+spatialTimeUnfiltered = np.zeros(len(pvdXMLTreeRoot[0]))
+for i in range(len(spatialTimeUnfiltered)):
+    if timeFileArrayTemp[i][0]== "":
+        spatialTimeUnfiltered[i] = -99999
+    else:
+        spatialTimeUnfiltered[i] = timeFileArrayTemp[i][0]
+timeFunctionsTimeUnfiltered = spatialTimeUnfiltered
+
+#timeFunctionsTimeUnfiltered = vtk_to_numpy(timeFunctionsTimeVtkArray)
+
+kdvSpeedUnfiltered = vtk_to_numpy(kdvSpeedVtkArray)
+
+# calculate shift
+kdvSpaceTraveledUnfiltered = np.zeros(len(timeFunctionsTimeUnfiltered))
+kdvSpaceTraveledUnfiltered[0] = 0
+for i in range(len(timeFunctionsTimeUnfiltered)-1):
+    kdvSpaceTraveledUnfiltered[i+1] = kdvSpaceTraveledUnfiltered[i] + (timeFunctionsTimeUnfiltered[i+1]-timeFunctionsTimeUnfiltered[i])*kdvSpeedUnfiltered[i]
     
+def filterTimeFunctionForSpecifiedTimeInterval(unfilteredTimeArray, unfilteredFunctionArray, tmin, tmax):
+    index = 0
+    funcTemp = np.zeros(len(unfilteredTimeArray))
+    for i in range(len(unfilteredTimeArray)):
+        timeStep = unfilteredTimeArray[i]
+        if timeStep>=tmin and (timeStep<=tmax or tmax <0):
+            funcTemp[index] = unfilteredFunctionArray[i]
+            index += 1
+    return funcTemp[:index]
+    
+# filter timeFunctions for specified time interval
+timeFunctionsTime = filterTimeFunctionForSpecifiedTimeInterval(timeFunctionsTimeUnfiltered, timeFunctionsTimeUnfiltered, STARTTIME, ENDTIME)
+timeFunctionsSpaceTraveled = filterTimeFunctionForSpecifiedTimeInterval(timeFunctionsTimeUnfiltered, kdvSpaceTraveledUnfiltered, STARTTIME, ENDTIME)
+timeFunctionsSpeed = filterTimeFunctionForSpecifiedTimeInterval(timeFunctionsTimeUnfiltered, kdvSpeedUnfiltered, STARTTIME, ENDTIME)
+
+
+# check time of timeFunctions matches time of spatial functions
+for i in range(len(timeFunctionsTime)-2):
+    if timeFunctionsTime[i] != t[i]:
+        print("time functions of space functions and time functions dont match in \t i=",i,"th position","\n\t"+"space functions time ",t,"\n\t","time functions time ",timeFunctionsTime)
+        warnings.warn("time functions of space functions and time functions dont match"+"\n\t"+"space functions time "+t+"\n\t"+"time functions time "+timeFunctionsTime)
+
+
 functionName = vtkArray.GetName()
 infoString += "\n\t"+"functionName"+" = \t\t\t"+str(functionName)
+
+
+if FREEZSOLUTION:
+#if False:
+    spatialIndizes = len(dataArray[0,:])
+    spaceStep = L/spatialIndizes
+    for i in range(len(dataArray[:,0])):
+        indexShift = round(timeFunctionsSpaceTraveled[i]/spaceStep)  % spatialIndizes
+        dataArray[i,:] = np.roll(dataArray[i,:],-indexShift)
+
 
 print(datetime.datetime.now(),"creating normalized array") 
 # create normalized data array
@@ -245,22 +323,28 @@ print(datetime.datetime.now(),"plot assigned")
 
 ### show/export plot
 print(datetime.datetime.now(),"plotting")
-plt.savefig(outputFolderPath+"plot.png", dpi = 128, bbox_inches='tight')
+if DEBUGGING:
+    plt.show()
+else:
+    plt.savefig(outputFolderPath+"plot.png", dpi = 128, bbox_inches='tight')
 print(datetime.datetime.now(),"exported")
 
 ### write info to file
 print(infoString)
-originalInfoFilePath = inputFolderPath+"info.txt"
-if os.path.isfile(originalInfoFilePath):
-    copy(originalInfoFilePath, outputFolderPath+"info.txt")
-infoFile = open(outputFolderPath+"info.txt","a")
+if not(DEBUGGING):
+    if os.path.isfile(originalInfoFilePath):
+        copy(originalInfoFilePath, outputFolderPath+"info.txt")
+infoFile = open(originalInfoFilePath,"a")
 scriptEndTime = datetime.datetime.now()
 scriptTime = scriptEndTime-scriptStartTime
 print(scriptEndTime,"total visualization time"+" = \t"+str(scriptTime))
 infoString += "\n\t"+"total visualization time"+" = \t"+str(scriptTime)
-infoFile.write("\n\n")
-infoFile.write(infoString)
-infoFile.close()
+if DEBUGGING:
+    print(infoString)
+else:
+    infoFile.write("\n\n")
+    infoFile.write(infoString)
+    infoFile.close()
 #plt.show()
 
 
