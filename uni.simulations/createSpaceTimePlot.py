@@ -34,9 +34,9 @@ dataFilePath = dataFolderPath+"u.pvd"
 timeDataFilePath = dataFolderPath+"timeFunctions_0.vtu"
 originalInfoFilePath = inputFolderPath+"info.txt"
 outputParentFolderPath = scriptFilePath + "/../data/visualizeData/output/"    #+timestamp -> kein parent mehr
-STARTTIME = 75000
-ENDTIME = STARTTIME+25000            #-1 for all
-SHOWNORMALIZED = True
+STARTTIME = 0
+ENDTIME = STARTTIME+10000 #STARTTIME+200            #-1 for all
+SHOWNORMALIZED = False
 FREEZSOLUTION = True
 ##### PARAMETERS #####
 DEBUGGING = False
@@ -231,7 +231,7 @@ timeFunctionsSpeed = filterTimeFunctionForSpecifiedTimeInterval(timeFunctionsTim
 
 
 # check time of timeFunctions matches time of spatial functions
-for i in range(len(timeFunctionsTime)-2):
+for i in range(min(len(timeFunctionsTime),len(t))):
     if timeFunctionsTime[i] != t[i]:
         print("time functions of space functions and time functions dont match in \t i=",i,"th position","\n\t"+"space functions time ",t,"\n\t","time functions time ",timeFunctionsTime)
         warnings.warn("time functions of space functions and time functions dont match"+"\n\t"+"space functions time "+t+"\n\t"+"time functions time "+timeFunctionsTime)
@@ -241,27 +241,32 @@ functionName = vtkArray.GetName()
 infoString += "\n\t"+"functionName"+" = \t\t\t"+str(functionName)
 
 
+freezeDataArray = np.empty([filesFound, points])
 if FREEZSOLUTION:
+    print(datetime.datetime.now(),"creating freezing array") 
 #if False:
     spatialIndizes = len(dataArray[0,:])
     spaceStep = L/spatialIndizes
     for i in range(len(dataArray[:,0])):
         indexShift = round(timeFunctionsSpaceTraveled[i]/spaceStep)  % spatialIndizes
-        dataArray[i,:] = np.roll(dataArray[i,:],-indexShift)
+        freezeDataArray[i,:] = np.roll(dataArray[i,:],-indexShift)
 
 
-print(datetime.datetime.now(),"creating normalized array") 
 # create normalized data array
 dataArrayNormalized = numpy.copy(dataArray)
+
 LinftyDataArray = 0
 for i in range(filesFound):
     if max(abs(dataArrayNormalized[i,:]))> LinftyDataArray:
         LinftyDataArray = max(abs(dataArrayNormalized[i,:]))
-infoString += "\n\t"+"LinftyDataArray"+" = \t\t"+str(LinftyDataArray)
-
-for i in range(filesFound):
-    dataArrayNormalized[i,:] = LinftyDataArray/max(abs(dataArrayNormalized[i,:]))*np.copy(dataArrayNormalized[i,:])
-
+        infoString += "\n\t"+"LinftyDataArray"+" = \t\t"+str(LinftyDataArray)    
+if SHOWNORMALIZED:
+    print(datetime.datetime.now(),"creating normalized array") 
+    for i in range(filesFound):
+        dataArrayNormalized[i,:] = LinftyDataArray/max(abs(dataArrayNormalized[i,:]))*np.copy(dataArrayNormalized[i,:])
+        
+        
+        
 
 ### plotting ###
 
@@ -286,32 +291,53 @@ else:
 if actualEndTime-actualStartTime > 1000: 
     additionalFigHeight = (actualEndTime-actualStartTime - 1000)/1000*3/4*9 # factor 3/4 because the actual plot takes about 3/4 of the whole picture
 fig = plt.figure()
+
+figWidht = 10
+numberOfPlots = 1
 if SHOWNORMALIZED:
-    fig.set_size_inches(16, 9+additionalFigHeight)
-else:
-    fig.set_size_inches(10, 9+additionalFigHeight)
+    figWidht += 6
+    numberOfPlots += 1
+if FREEZSOLUTION:
+    figWidht += 6
+    numberOfPlots += 1
+fig.set_size_inches(figWidht, 9+additionalFigHeight)
     
 plt.suptitle(TITLE)
 levels = np.linspace(-LinftyDataArray,LinftyDataArray,COLORRESOLUTION+1)
-if SHOWNORMALIZED:
-    dataAx = fig.add_subplot(121)
-else:
-    dataAx = fig.add_subplot(111)
-    
+
+plotNumber = 1
+dataAx = fig.add_subplot(1,numberOfPlots,plotNumber)
+
+
 dataContourf = dataAx.contourf(x,t,dataArray, levels=levels, cmap='coolwarm')
+
+axis = [dataAx]
+
+if FREEZSOLUTION:
+    plotNumber += 1
+    dataFreezeAx = fig.add_subplot(1,numberOfPlots,plotNumber)
+    dataFreezeContourf = dataFreezeAx.contourf(x,t,freezeDataArray, levels=levels, cmap='coolwarm')
+    
+    dataFreezeAx.set_title("frozen")    
+    dataFreezeAx.set_xlabel("x")
+    dataFreezeAx.set_yticks([])  
+    dataFreezeAx.yaxis.tick_right()
+    axis.append(dataFreezeAx)
+    
 if SHOWNORMALIZED:
-    dataNormalizedAx = fig.add_subplot(122)
-    dataNormalizedContourf = dataNormalizedAx.contourf(x,t,dataArrayNormalized, levels=101, cmap='coolwarm')
-    colorbar = fig.colorbar(dataContourf,ax=[dataAx,dataNormalizedAx], location='right')        #werte von dataContourf, aber an beiden ([dataAx,dataNormalizedAx]) damit kein ax kleiner wird
+    plotNumber += 1
+    dataNormalizedAx = fig.add_subplot(1,numberOfPlots,plotNumber)
+    dataNormalizedContourf = dataNormalizedAx.contourf(x,t,dataArrayNormalized, levels=levels, cmap='coolwarm')
     
     dataNormalizedAx.set_title("normalized")    
     dataNormalizedAx.set_xlabel("x")
-    #dataNormalizedAx.yaxis.set_label_position('right')
     dataNormalizedAx.set_yticks([])  
     dataNormalizedAx.yaxis.tick_right()
+    axis.append(dataNormalizedAx)
+    
+colorbar = fig.colorbar(dataContourf,ax=axis, location='right')
+    
 
-else:
-    colorbar = fig.colorbar(dataContourf,ax=[dataAx], location='right')        #werte von dataContourf, aber an beiden ([dataAx,dataNormalizedAx]) damit kein ax kleiner wird
 ticksLinSpace = np.linspace(-LinftyDataArray,LinftyDataArray,NUMBEROFCOLORTICKS)
 colorbar.set_ticks(ticksLinSpace)
 dataAx.set_title(functionName)

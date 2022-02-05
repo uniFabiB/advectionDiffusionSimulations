@@ -1,10 +1,14 @@
+import datetime
+from fileinput import filename
+# using now() to get current time  
+time_start = datetime.datetime.now()
+print(time_start,"starting ...")  
 import numpy as np
 import os
 os.environ["OMP_NUM_THREADS"] = "1"             # had a warning that it might run best on 1 thread
 from firedrake import *
-### time ###
+
 import time
-import datetime
 
 ### code source code file ###
 from shutil import copy
@@ -19,10 +23,12 @@ from numpy import imag
 
 
 
-# using now() to get current time  
-time_start = datetime.datetime.now()
-print(time_start,"starting ...")  
+print(datetime.datetime.now(),"import complete")
+simulationId = str(time_start) +str("_-_") +str(int(np.round(10000000000*np.random.rand())))
+simulationId = simulationId.replace(":","-")
+simulationId = simulationId.replace(" ","_")
 infoString = "simulation info"
+infoString += "\n\t"+"simulationId"+" = \t\t"+str(simulationId)
 infoString += "\n\t"+"time_start"+" = \t\t"+str(time_start)
 
 
@@ -32,50 +38,40 @@ infoString += "\n\t"+"time_start"+" = \t\t"+str(time_start)
 ### PARAMETERS ###
 
 # interval lengths
-L = 128                 #128
- 
+L = 128                 #128 
 # spatial steps
 nProL = 8               #8
 n = L*nProL
-
 # times
 numberOfTimestepsPerUnit = 200
-T_end = 250
+T_end = 10000
 timeInitialUadv = 0.001      ### for miles u_adv need a sine flow until t = 0.01 (otherwise get a stationary solution)
-
 # pde name
 # list of available shortNames: 
     #KdVKuraSiva
 pdeShortName = "KdVKuraSiva"
-
 # finite elements
 finitEleFamily = "CG"           #https://www.firedrakeproject.org/variational-problems.html#supported-finite-elements
 finitEleDegree = 1
-
-
 # force 0 average of the initial data? True, False
 forceICZeroAverage = False
-
 # kappa
 #in theta_t + < u_adv, grad theta> + kappa*laplace theta + laplace^2 theta = 0
-kappa = abs(1/sqrt(2))
+kappa = 0 #abs(1/sqrt(2))*1/10
 epsilonKdVKuraSiva = np.abs(np.sqrt(1-np.power(kappa,2)))       # np.sqrt(1-np.power(kappa,2))
 
-
 ### initial condition ###
-ic_scale = 1
-ic_freq = 1
-ic_freqShift = 0
-randomIC = False
-# possible initial data files:
-    # 20210929_162000_1024Random1Durch1000Values, 20210929_162000_4096Random1Durch1000Values
-    # 20211026_140000_1024Random1Durch1Values, 20211026_140000_4096Random1Durch1Values
-    # 20211028_113529_1024Random_scale1 
-loadInitialDataFilename = "20211028_113529_1024Random_scale1"
+initialCondition = "checkPointFile"
+# possible initial conditions
+    # "checkPointFile", "*.h5"           takes the *.h5 file in the initial data folder (initialDataPath) and uses this
+    # "sin"
+    # items from loadableInitialConditions
+loadableInitialConditions = ["20210929_162000_1024Random1Durch1000Values", "20210929_162000_4096Random1Durch1000Values",
+                             "20211026_140000_1024Random1Durch1Values", "20211026_140000_4096Random1Durch1Values",
+                             "20211028_113529_1024Random_scale1"]
 
 
-### rescale outputs -> \| . \|_2 = 1 ###
-rescaleOutputs = True
+
 
 
 
@@ -120,11 +116,13 @@ infoString += "\n\t"+"finitEleDegree"+" = \t\t"+str(finitEleDegree)
 infoString += "\n\t"+"forceICZeroAverage"+" = \t\t"+str(forceICZeroAverage)
 infoString += "\n\t"+"kappa"+" = \t\t"+str(kappa)
 infoString += "\n\t"+"epsilonKdVKuraSiva"+" = \t\t"+str(epsilonKdVKuraSiva)
-infoString += "\n\t"+"ic_scale"+" = \t\t"+str(ic_scale)
-infoString += "\n\t"+"ic_freq"+" = \t\t"+str(ic_freq)
-infoString += "\n\t"+"randomIC"+" = \t\t"+str(randomIC)
-infoString += "\n\t"+"loadInitialDataFilename"+" = \t\t"+str(loadInitialDataFilename)
-infoString += "\n\t"+"rescaleOutputs"+" = \t\t"+str(rescaleOutputs)
+infoString += "\n\t"+"initialCondition"+" = \t\t"+str(initialCondition)
+if initialCondition in ["sin"]:
+    ic_scale = 1
+    ic_freq = 1
+    ic_freqShift = 0
+    infoString += "\n\t"+"ic_scale"+" = \t\t"+str(ic_scale)
+    infoString += "\n\t"+"ic_freq"+" = \t\t"+str(ic_freq)
 infoString += "\n\t"+"writeOutputEvery"+" = \t\t"+str(writeOutputEvery)
 
 
@@ -149,8 +147,8 @@ timeFunctionsFilePath = output_dir_path+"simulationData/timeFunctions.pvd"
 infoFilePath = output_dir_path+"info.txt"
 # check if cleaned up output folder
 if not(overwritePreviousData) and os.path.isfile(infoFilePath):
-    print(output_dir_path)
-    raise Exception(infoFilePath + ' found - probably not cleaned up the output directory:\n\txdg-open '+output_dir_path)
+    exceptionString = infoFilePath + ' found - probably not cleaned up the output directory:\n\txdg-open '+output_dir_path
+    raise Exception(exceptionString)
 outfile_u = File(meshFunctionsFilePath)
 outfile_timeFunctions = File(timeFunctionsFilePath)
 
@@ -193,33 +191,61 @@ x = SpatialCoordinate(mesh)
 print(datetime.datetime.now(),"spaces defined")
 
 
-### initial data ###
+
+
+
+
+
+
+### initial data ###initialCondition
 x_u0 = SpatialCoordinate(mesh)
 
-ic_c = 1
 ic_u = Function(V)
-ic_u.interpolate(ic_scale*sin(ic_freq*2*pi*x_u0[0]/L+ic_freqShift))
-#ic_u = project(as_vector([ic_scale*posPartofFunction(x_u0[0]*sin(ic_freq_x*2*pi*x_u0[0]/L_x))]), V)
-#ic_u = project(as_vector([ np.power(np.exp(1),(-np.power(1/2*(x_u0[0]-50),2))) ]), V)
-#ic_u = project(as_vector([ic_scale*cos(ic_freq_x*2*pi*x_u0[0]/L_x)]), V)
+if initialCondition in ["sin"]:
+    ic_u.interpolate(ic_scale*sin(ic_freq*2*pi*x_u0[0]/L+ic_freqShift))
+    #ic_u = project(as_vector([ic_scale*posPartofFunction(x_u0[0]*sin(ic_freq_x*2*pi*x_u0[0]/L_x))]), V)
+    #ic_u = project(as_vector([ np.power(np.exp(1),(-np.power(1/2*(x_u0[0]-50),2))) ]), V)
+    #ic_u = project(as_vector([ic_scale*cos(ic_freq_x*2*pi*x_u0[0]/L_x)]), V)
 
+#u_0Random = 1/1000*2*(np.random.rand(n)-0.5)       # zwischen 0 und 1
+#ic_u = Function(V,u_0Random)
 
-
-u_0Random = 1/1000*2*(np.random.rand(n)-0.5)       # zwischen 0 und 1
-
-if randomIC:
-    ic_u = Function(V,u_0Random)
-
-
-if len(loadInitialDataFilename)>0:
-    initialDataLoadingPath = initialDataPath + loadInitialDataFilename +".npy"
+if initialCondition in loadableInitialConditions:
+    initialDataLoadingPath = initialDataPath + initialCondition +".npy"
     infoString += "\n\t"+"initialDataLoadingPath"+" = \t\t"+str(initialDataLoadingPath)
     u0_loaded = np.load(initialDataLoadingPath)
     print(datetime.datetime.now(),"loading initial data " ,"\t", initialDataLoadingPath)
     ic_u = Function(V,u0_loaded)
 
-    
-    
+if initialCondition in ["checkPointFile", "*.h5"]:
+    counter = 0
+    h5FileName = ""
+    for file in os.listdir(initialDataPath):
+        if file.endswith(".h5"):
+            counter += 1
+            h5FileName = file
+            h5FileNameWithoutExtension = os.path.splitext(h5FileName)[0]
+    if counter == 1:
+        infoString += "\n\t"+"h5FileName"+" = \t\t"+str(h5FileName)
+        initialDataCheckPoint = DumbCheckpoint(initialDataPath+h5FileNameWithoutExtension, mode=FILE_READ)
+        initialDataCheckPoint.load(ic_u, name = "u")
+    elif counter == 0:
+        exceptionString = "no *.h5 file found in initialDataPath: " + initialDataPath
+        raise Exception(exceptionString)
+    else:
+        exceptionString = "multiple *.h5 files in initialDataPath" + initialDataPath
+        raise Exception(exceptionString)
+
+
+if forceICZeroAverage:
+    ic_u -= assemble(ic_u*dx)/L
+
+if norm(ic_u,"l2") == 0:
+    print("ERROR ic_u = 0 so probably wrong initial conditions specified")
+    1/0
+
+
+
 print(datetime.datetime.now(),"inital values assigned ")  
 
 
@@ -247,14 +273,13 @@ elif pdeShortName in ['KdVKuraSiva']:
     
 else:
     print("ERROR wrong pde short name (not in list)")
+    1/0
     
     
 def writeMeshFunctions():
     outfile_u.write(project(u, V_out,name="u"), time=t)
 
 
-if forceICZeroAverage:
-    ic_u -= assemble(ic_u*dx)/L
 
 ### define the functions
 if numberTestFunctions == 1:
@@ -394,12 +419,14 @@ elif pdeShortName in ['kuraSiva']:
 elif pdeShortName in ['KdVKuraSiva']:
     F = F_KdVKuraSiva
     if epsilonKdVKuraSiva != abs(epsilonKdVKuraSiva):
-        print(datetime.datetime.now(), "ERROR\t be careful\t epsilon is not real -> taking the absolute value (probably kappa>1)")    # gibt automatisch error weil sqrt(1-kappa²)        
+        print(datetime.datetime.now(), "ERROR\t be careful\t epsilon is not real -> taking the absolute value (probably kappa>1)")    # gibt automatisch error weil sqrt(1-kappa²)
+        1/0 
     print(datetime.datetime.now(),"epsilon = ",epsilonKdVKuraSiva)
 elif pdeShortName in ['test2functions']:
     F = F_test2functions
 else:
     print("ERROR wrong pde short name (not in list)")
+    1/0
 
 
 # problem = NonlinearVariationalProblem(F, w, bcs=[bc_u, bc_v])
@@ -498,10 +525,7 @@ writeTimeFunctions()
 
 
 ### copy script to save it ###
-scriptTimeStamp = str(datetime.datetime.now())
-scriptTimeStamp = scriptTimeStamp.replace(":","-")
-scriptTimeStamp = scriptTimeStamp.replace(" ","_")
-scriptCopyPath = output_dir_path + "used_script_simulation_"+scriptTimeStamp+".py"
+scriptCopyPath = output_dir_path + "used_script_simulation_"+simulationId+".py"
 copy(os.path.realpath(__file__), scriptCopyPath)
 
 infoString += "\n\t"+"scriptCopyPath"+" = \t\t"+str(scriptCopyPath)
@@ -559,8 +583,15 @@ while (t < T_end):
         lastLogOutput = time.time()
     lastRealTime = datetime.datetime.now()
     
+    
+    
+writeMeshFunctions()
 saveTimeFunctionsArray(t_iOutput+1)
 writeTimeFunctions()
+
+endStateCheckPoint = DumbCheckpoint(output_dir_path+"endState_"+simulationId, mode=FILE_CREATE)
+endStateCheckPoint.store(u, name="u")
+
 
 
 
