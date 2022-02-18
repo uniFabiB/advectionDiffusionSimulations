@@ -38,13 +38,13 @@ infoString += "\n\t"+"time_start"+" = \t\t"+str(time_start)
 ### PARAMETERS ###
 
 # interval lengths
-L = 128                 #128 
+L = 8                 #128 
 # spatial steps
-nProL = 8               #8
+nProL = 128               #8
 n = L*nProL
 # times
 numberOfTimestepsPerUnit = 200
-T_end = 10000
+T_end = 5000
 timeInitialUadv = 0.001      ### for miles u_adv need a sine flow until t = 0.01 (otherwise get a stationary solution)
 # pde name
 # list of available shortNames: 
@@ -57,11 +57,11 @@ finitEleDegree = 1
 forceICZeroAverage = False
 # kappa
 #in theta_t + < u_adv, grad theta> + kappa*laplace theta + laplace^2 theta = 0
-kappa = 0 #abs(1/sqrt(2))*1/10
+kappa = abs(1/sqrt(2))
 epsilonKdVKuraSiva = np.abs(np.sqrt(1-np.power(kappa,2)))       # np.sqrt(1-np.power(kappa,2))
 
 ### initial condition ###
-initialCondition = "checkPointFile"
+initialCondition = "20211028_113529_1024Random_scale1"
 # possible initial conditions
     # "checkPointFile", "*.h5"           takes the *.h5 file in the initial data folder (initialDataPath) and uses this
     # "sin"

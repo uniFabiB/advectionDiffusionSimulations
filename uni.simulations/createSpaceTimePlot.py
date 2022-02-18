@@ -27,15 +27,15 @@ scriptTimeStamp = scriptTimeStamp.replace(" ","_")
 
 
 ##### PARAMETERS #####
-TITLE = "L=128, kappa=REPLACEKAPPABYSCRIPT, epsilon=sqrt(1-kappa^2), ic=20211028_113529_1024Random_scale1"
-inputFolderPath =  scriptFilePath+"/../data/visualizeData/input/"
+TITLE = "L=REPLACElBYSCRIPT, kappa=REPLACEkappaBYSCRIPT, epsilon=REPLACEepsilonSBYSCRIPT, ic=REPLACEinitialconditionBYSCRIPT"
+inputFolderPath =  scriptFilePath+"/../data/0visualizeData/input/"
 dataFolderPath = inputFolderPath+"simulationData/"
 dataFilePath = dataFolderPath+"u.pvd"
 timeDataFilePath = dataFolderPath+"timeFunctions_0.vtu"
 originalInfoFilePath = inputFolderPath+"info.txt"
-outputParentFolderPath = scriptFilePath + "/../data/visualizeData/output/"    #+timestamp -> kein parent mehr
-STARTTIME = 0
-ENDTIME = STARTTIME+10000 #STARTTIME+200            #-1 for all
+outputParentFolderPath = scriptFilePath + "/../data/0visualizeData/output/"    #+timestamp -> kein parent mehr
+STARTTIME = -1
+ENDTIME = -1 #STARTTIME+200            #-1 for all
 SHOWNORMALIZED = False
 FREEZSOLUTION = True
 ##### PARAMETERS #####
@@ -43,21 +43,42 @@ DEBUGGING = False
 
 
 ### copy script to save it ###
+    
 infoFile = open(originalInfoFilePath,"r")
-kappa = "undefined"
-for line in infoFile:
-    kappaSearchString = "kappa = \t\t"
-    kappaEndString = "\n"
-    if line.find(kappaSearchString)>-1:
-        indexKappa = line.index(kappaSearchString);
-        indexEndKappa = line.index(kappaEndString);
-        kappa = line[indexKappa+len(kappaSearchString):indexEndKappa]
-if kappa == "undefined":
-    warnings.warn(str("kappa not found in infofile"))
-TITLE = TITLE.replace("REPLACEKAPPABYSCRIPT", str(kappa))
+infoFileLines = infoFile.readlines()
+infoFile.close()
+def getInfoFromInfoFile(infoFileLines, searchString):
+    ## should include \tL sonst nProL -> wrong
+    result = "undefined"
+    endString = "\n"
+    for line in infoFileLines:
+        if line.find(searchString)>-1:
+            indexStart = line.index(searchString);
+            indexEnd = line.index(endString);
+            result = line[indexStart+len(searchString):indexEnd]
+    if result == "undefined":
+        warnings.warn(str(searchString + "not found in infoFileLines"))
+    result = result.replace(" ","")
+    result = result.replace("\t","")
+    print("searching for "+"searchString" + " in infoFile results in " + result)
+    return result
+    
+
+L = getInfoFromInfoFile(infoFileLines, "\tL =")
+kappa = getInfoFromInfoFile(infoFileLines, "\tkappa =")
+epsilon = getInfoFromInfoFile(infoFileLines, "\tepsilonKdVKuraSiva =")
+initialCondition = getInfoFromInfoFile(infoFileLines, "\tinitialCondition =")
+
+
+
+TITLE = TITLE.replace("REPLACElBYSCRIPT", str(L))
+TITLE = TITLE.replace("REPLACEkappaBYSCRIPT", str(kappa))
+TITLE = TITLE.replace("REPLACEepsilonSBYSCRIPT", str(epsilon))
+TITLE = TITLE.replace("REPLACEinitialconditionBYSCRIPT", str(initialCondition))
+
 titleNameReplacedCharacters = TITLE.replace(" ","_")
 titleNameReplacedCharacters = titleNameReplacedCharacters.replace("/",":")
-outputFolderPath = outputParentFolderPath+titleNameReplacedCharacters+"_"+scriptTimeStamp+"/"
+outputFolderPath = outputParentFolderPath+scriptTimeStamp+"_"+titleNameReplacedCharacters+"/"
 usedVisualizationScriptName = "used_script_visualization_"+scriptTimeStamp+".py"
 if not(DEBUGGING):
     os.mkdir(outputFolderPath)
@@ -357,7 +378,7 @@ print(datetime.datetime.now(),"plotting")
 if DEBUGGING:
     plt.show()
 else:
-    plt.savefig(outputFolderPath+"plot.png", dpi = 128, bbox_inches='tight')
+    plt.savefig(outputFolderPath+TITLE+"plot.png", dpi = 128, bbox_inches='tight')
 print(datetime.datetime.now(),"exported")
 
 ### write info to file
